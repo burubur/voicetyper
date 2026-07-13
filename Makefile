@@ -1,4 +1,4 @@
-.PHONY: download-models debug install uninstall
+.PHONY: download-models debug install uninstall clean
 
 # Downloads all defined voice transcriber models sequentially via the bash script
 download-models:
@@ -15,3 +15,8 @@ install:
 # Uninstalls VoiceTyper locally
 uninstall:
 	./uninstall.sh
+
+# Removes local build artifacts and downloaded whisper models
+clean:
+	rm -rf .build
+	rm -rf "$$HOME/.voicetyper"

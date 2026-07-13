@@ -52,7 +52,7 @@ voicetyper
 
 ### Uninstall
 
-If you ever wish to completely remove the app from your machine along with its models, simply run:
+If you ever wish to remove the installed app binary while keeping downloaded models, simply run:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/burubur/voicetyper/main/uninstall.sh | bash
@@ -61,6 +61,11 @@ curl -sSL https://raw.githubusercontent.com/burubur/voicetyper/main/uninstall.sh
 Alternatively, if you cloned the repository locally, you can run:
 ```bash
 make uninstall
+```
+
+To remove local build artifacts and downloaded whisper models, run:
+```bash
+make clean
 ```
 
 ---

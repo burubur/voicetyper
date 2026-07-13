@@ -6,7 +6,6 @@ echo "🗑️ Uninstalling Swift VoiceTyper..."
 
 INSTALL_DIR="/usr/local/bin"
 BINARY_PATH="$INSTALL_DIR/voicetyper"
-MODELS_DIR="$HOME/.voicetyper"
 
 echo "🛑 Stopping running instances..."
 pkill -i -f "voicetyper" || true
@@ -25,18 +24,8 @@ else
     echo "⚠️ Binary not found at $BINARY_PATH. It might have already been uninstalled."
 fi
 
-# 2. Offer to remove downloaded models
-if [ -d "$MODELS_DIR" ]; then
-    echo ""
-    read -p "Do you also want to delete the downloaded whisper models in $MODELS_DIR? (~466MB+ of space) (y/N) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf "$MODELS_DIR"
-        echo "✅ Models removed."
-    else
-        echo "⚠️ Models kept intact."
-    fi
-fi
+echo "ℹ️ Downloaded models are kept in $HOME/.voicetyper."
+echo "   Run 'make clean' from the project root if you want to remove them."
 
 echo ""
 echo "✅ VoiceTyper has been successfully uninstalled."
