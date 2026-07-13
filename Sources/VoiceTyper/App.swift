@@ -11,6 +11,7 @@ final class App: NSObject, NSApplicationDelegate {
     private let audioRecorder = AudioRecorder()
     private let textInjector = TextInjector()
     private let keyboardListener = KeyboardListener()
+    private let historyWindowController = TranscriptionHistoryWindowController()
     private var transcriber: Transcriber?
 
     /// Tracks whether an abort was requested to cancel in-flight transcription.
@@ -24,6 +25,7 @@ final class App: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         requestPermissions()
         setupMenuBar()
+        setupHistoryWindow()
         loadModel()
         keyboardListener.delegate = self
 
@@ -64,8 +66,27 @@ final class App: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(
+            NSMenuItem(title: "Show VoiceTyper", action: #selector(showHistoryWindow), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(
             NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    private func setupHistoryWindow() {
+        historyWindowController.onMicPressed = { [weak self] in
+            guard let self else { return }
+            self.showHistoryWindow()
+            print("🎙️ Hold Right Shift to record.")
+        }
+
+        historyWindowController.onSettingsPressed = { [weak self] in
+            guard let self else { return }
+            self.showHistoryWindow()
+            print("⚙️ Settings are not configured yet.")
+        }
+
+        historyWindowController.showWindow(nil)
     }
 
     private func loadModel() {
@@ -86,6 +107,10 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(self)
+    }
+
+    @objc private func showHistoryWindow() {
+        historyWindowController.showWindow(nil)
     }
 
     // MARK: - Transcription Pipeline
@@ -141,6 +166,7 @@ final class App: NSObject, NSApplicationDelegate {
                 }
 
                 print("✅ Transcribed: \(text)")
+                self.historyWindowController.appendTranscription(text)
                 // Append trailing space so consecutive dictations don't merge
                 self.textInjector.injectText(text + " ")
                 self.updateIcon(symbol: "mic")
@@ -170,6 +196,7 @@ extension App: KeyboardListenerDelegate {
     func keyboardListenerDidStartRecording() {
         abortRequested = false
         updateIcon(symbol: "mic.fill")
+        historyWindowController.setRecording(true)
         FloatingRecordingIndicator.shared.show()
 
         do {
@@ -183,6 +210,7 @@ extension App: KeyboardListenerDelegate {
 
     func keyboardListenerDidStopRecording() {
         print("⏹️  Recording stopped. Processing...")
+        historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
         processRecording()
     }
@@ -191,6 +219,7 @@ extension App: KeyboardListenerDelegate {
         abortRequested = true
         _ = audioRecorder.stopRecording()  // Discard audio
         textInjector.stopProcessingAnimation()  // Instantly clear any ongoing injection animation
+        historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
         updateIcon(symbol: "mic")
         print("🚫 Aborted. Dictation discarded.")
