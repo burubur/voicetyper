@@ -1,31 +1,41 @@
 import Cocoa
+import Foundation
 
 // MARK: - TranscriptionHistoryItem
 
-struct TranscriptionHistoryItem {
+struct TranscriptionHistoryItem: Codable, Identifiable, Equatable {
+    let id: UUID
     let text: String
     let createdAt: Date
+
+    init(id: UUID = UUID(), text: String, createdAt: Date = Date()) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+    }
 }
 
 // MARK: - TranscriptionHistoryWindowController
 
 @MainActor
-final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFieldDelegate {
+final class TranscriptionHistoryWindowController: NSWindowController, NSTextFieldDelegate {
     var onMicPressed: (() -> Void)?
     var onClearPressed: (() -> Void)?
-    var onSettingsPressed: (() -> Void)?
+    var onSettingsPressed: ((NSView) -> Void)?
 
     private var items: [TranscriptionHistoryItem] = []
     private var filteredItems: [TranscriptionHistoryItem] = []
     private var isRecording = false
 
     private let contentView = ThemeAwareView()
-    private let searchField = NSSearchField()
+    private let searchField = NSTextField()
+    private let searchPill = NSView()
     private let scrollView = NSScrollView()
     private let cardsStack = NSStackView()
     private let recordButton = CircleRecordButton()
     private let emptyLabel = NSTextField(labelWithString: "No transcriptions yet")
     private let bottomBar = ThemeAwareView()
+    private lazy var settingsButton = iconButton(symbol: "gearshape", action: #selector(settingsButtonPressed))
 
     private lazy var dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -59,6 +69,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         super.init(window: window)
 
         setupContent()
+        loadHistory()
         applyFilter()
     }
 
@@ -74,6 +85,13 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
 
     func appendTranscription(_ text: String, createdAt: Date = Date()) {
         items.insert(TranscriptionHistoryItem(text: text, createdAt: createdAt), at: 0)
+        saveHistory()
+        applyFilter()
+    }
+
+    func deleteTranscription(id: UUID) {
+        items.removeAll { $0.id == id }
+        saveHistory()
         applyFilter()
     }
 
@@ -83,13 +101,45 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
     }
 
     func clearHistory() {
-        items.removeAll()
-        applyFilter()
+        let alert = NSAlert()
+        alert.messageText = "Clear History"
+        alert.informativeText = "Are you sure you want to clear all transcription history?"
+        alert.addButton(withTitle: "Clear All")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            items.removeAll()
+            saveHistory()
+            applyFilter()
+            onClearPressed?()
+        }
     }
 
     func controlTextDidChange(_ obj: Notification) {
         applyFilter()
     }
+
+    // MARK: - Persistence
+
+    private func saveHistory() {
+        if let data = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(data, forKey: "transcription_history")
+        }
+    }
+
+    private func loadHistory() {
+        guard let data = UserDefaults.standard.data(forKey: "transcription_history") else { return }
+        do {
+            items = try JSONDecoder().decode([TranscriptionHistoryItem].self, from: data)
+        } catch {
+            print("⚠️ Failed to decode transcription history: \(error). Resetting history store.")
+            UserDefaults.standard.removeObject(forKey: "transcription_history")
+            items = []
+        }
+    }
+
+    // MARK: - Layout Setup
 
     private func setupContent() {
         guard let window else { return }
@@ -107,24 +157,32 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
     }
 
     private func setupSearchField() {
+        searchPill.translatesAutoresizingMaskIntoConstraints = false
+        searchPill.wantsLayer = true
+        searchPill.layer?.cornerRadius = 18
+        searchPill.layer?.borderWidth = 1
+
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.delegate = self
-        searchField.placeholderString = "Search in transcriptions"
-        searchField.font = .systemFont(ofSize: 15, weight: .regular)
-        searchField.textColor = Palette.primaryText
-        searchField.wantsLayer = true
-        searchField.layer?.cornerRadius = 24
-        searchField.layer?.borderWidth = 1
+        searchField.placeholderString = "Search transcriptions..."
+        searchField.font = .systemFont(ofSize: 13, weight: .regular)
         searchField.focusRingType = .none
-        searchField.bezelStyle = .roundedBezel
+        searchField.drawsBackground = false
+        searchField.isBordered = false
+        searchField.isBezeled = false
 
-        contentView.addSubview(searchField)
+        searchPill.addSubview(searchField)
+        contentView.addSubview(searchPill)
 
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 72),
-            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            searchField.heightAnchor.constraint(equalToConstant: 40),
+            searchPill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 60),
+            searchPill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            searchPill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            searchPill.heightAnchor.constraint(equalToConstant: 36),
+
+            searchField.leadingAnchor.constraint(equalTo: searchPill.leadingAnchor, constant: 16),
+            searchField.trailingAnchor.constraint(equalTo: searchPill.trailingAnchor, constant: -16),
+            searchField.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
         ])
     }
 
@@ -139,7 +197,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         cardsStack.translatesAutoresizingMaskIntoConstraints = false
         cardsStack.orientation = .vertical
         cardsStack.alignment = .width
-        cardsStack.spacing = 20
+        cardsStack.spacing = 16
         cardsStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
 
         let documentView = NSView()
@@ -179,40 +237,13 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         bottomBar.wantsLayer = true
         contentView.addSubview(bottomBar)
 
-        let shortcutIcon = NSTextField(labelWithString: "⇧")
-        shortcutIcon.translatesAutoresizingMaskIntoConstraints = false
-        shortcutIcon.font = .systemFont(ofSize: 16, weight: .medium)
-        shortcutIcon.textColor = Palette.secondaryText
-
-        let shortcutLabel = NSTextField(labelWithString: "Right Shift to record")
-        shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
-        shortcutLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        shortcutLabel.textColor = Palette.secondaryText
-
-        let dropImage = NSImageView(image: NSImage(systemSymbolName: "doc.badge.arrow.down", accessibilityDescription: nil) ?? NSImage())
-        dropImage.translatesAutoresizingMaskIntoConstraints = false
-        dropImage.contentTintColor = Palette.secondaryText
-        dropImage.imageScaling = .scaleProportionallyUpOrDown
-
-        let dropLabel = NSTextField(labelWithString: "Drop audio file here to transcribe")
-        dropLabel.translatesAutoresizingMaskIntoConstraints = false
-        dropLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        dropLabel.textColor = Palette.secondaryText
-
         recordButton.translatesAutoresizingMaskIntoConstraints = false
         recordButton.target = self
         recordButton.action = #selector(recordButtonPressed)
 
-        let micButton = iconButton(symbol: "mic.fill", action: #selector(recordButtonPressed))
         let clearButton = iconButton(symbol: "trash", action: #selector(clearButtonPressed))
-        let settingsButton = iconButton(symbol: "gearshape", action: #selector(settingsButtonPressed))
 
         bottomBar.addSubview(recordButton)
-        bottomBar.addSubview(shortcutIcon)
-        bottomBar.addSubview(shortcutLabel)
-        bottomBar.addSubview(dropImage)
-        bottomBar.addSubview(dropLabel)
-        bottomBar.addSubview(micButton)
         bottomBar.addSubview(clearButton)
         bottomBar.addSubview(settingsButton)
 
@@ -220,31 +251,16 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
             bottomBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 170),
+            bottomBar.heightAnchor.constraint(equalToConstant: 110),
 
             recordButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
-            recordButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 42),
-            recordButton.widthAnchor.constraint(equalToConstant: 44),
-            recordButton.heightAnchor.constraint(equalToConstant: 44),
+            recordButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 24),
+            recordButton.heightAnchor.constraint(equalToConstant: 42),
 
-            shortcutIcon.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 28),
-            shortcutIcon.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -58),
-            shortcutLabel.leadingAnchor.constraint(equalTo: shortcutIcon.trailingAnchor, constant: 12),
-            shortcutLabel.centerYAnchor.constraint(equalTo: shortcutIcon.centerYAnchor),
-
-            dropImage.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 28),
-            dropImage.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -26),
-            dropImage.widthAnchor.constraint(equalToConstant: 18),
-            dropImage.heightAnchor.constraint(equalToConstant: 22),
-            dropLabel.leadingAnchor.constraint(equalTo: dropImage.trailingAnchor, constant: 12),
-            dropLabel.centerYAnchor.constraint(equalTo: dropImage.centerYAnchor),
-
-            micButton.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -12),
-            clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -12),
+            clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -16),
             settingsButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -24),
-            micButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -24),
-            clearButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -24),
-            settingsButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -24),
+            clearButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
+            settingsButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
         ])
     }
 
@@ -254,8 +270,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         button.target = self
         button.action = action
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 36),
-            button.heightAnchor.constraint(equalToConstant: 36),
+            button.widthAnchor.constraint(equalToConstant: 24),
+            button.heightAnchor.constraint(equalToConstant: 24),
         ])
         return button
     }
@@ -275,8 +291,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         contentView.layer?.backgroundColor = Palette.windowBackground.cgColor
         bottomBar.layer?.backgroundColor = Palette.windowBackground.cgColor
         searchField.textColor = Palette.primaryText
-        searchField.layer?.backgroundColor = Palette.searchBackground.cgColor
-        searchField.layer?.borderColor = Palette.border.cgColor
+        searchPill.layer?.backgroundColor = Palette.searchBackground.cgColor
+        searchPill.layer?.borderColor = Palette.border.cgColor
         emptyLabel.textColor = Palette.secondaryText
         recordButton.refreshColors()
         cardsStack.arrangedSubviews.forEach { view in
@@ -294,13 +310,20 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
 
         for item in filteredItems {
             let card = TranscriptionCardView(
-                text: item.text,
+                item: item,
                 date: dateFormatter.string(from: item.createdAt),
-                time: timeFormatter.string(from: item.createdAt)
+                time: timeFormatter.string(from: item.createdAt),
+                onCopy: { text in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                },
+                onDelete: { [weak self] id in
+                    self?.deleteTranscription(id: id)
+                }
             )
             card.translatesAutoresizingMaskIntoConstraints = false
             cardsStack.addArrangedSubview(card)
-            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 124).isActive = true
+            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
         }
     }
 
@@ -310,25 +333,38 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
 
     @objc private func clearButtonPressed() {
         clearHistory()
-        onClearPressed?()
     }
 
     @objc private func settingsButtonPressed() {
-        onSettingsPressed?()
+        onSettingsPressed?(settingsButton)
     }
 }
 
 // MARK: - TranscriptionCardView
 
 private final class TranscriptionCardView: NSView {
+    private let item: TranscriptionHistoryItem
+    private let onCopy: (String) -> Void
+    private let onDelete: (UUID) -> Void
+
     private let textLabel: NSTextField
     private let dateLabel: NSTextField
     private let timeLabel: NSTextField
+    private let copyButton: IconButton
+    private let deleteButton: IconButton
+    private let toastLabel: NSTextField
 
-    init(text: String, date: String, time: String) {
-        self.textLabel = NSTextField(wrappingLabelWithString: text)
+    init(item: TranscriptionHistoryItem, date: String, time: String, onCopy: @escaping (String) -> Void, onDelete: @escaping (UUID) -> Void) {
+        self.item = item
+        self.onCopy = onCopy
+        self.onDelete = onDelete
+
+        self.textLabel = NSTextField(wrappingLabelWithString: item.text)
         self.dateLabel = NSTextField(labelWithString: date)
         self.timeLabel = NSTextField(labelWithString: time)
+        self.copyButton = IconButton(symbol: "doc.on.doc")
+        self.deleteButton = IconButton(symbol: "trash")
+        self.toastLabel = NSTextField(labelWithString: "Copied!")
 
         super.init(frame: .zero)
         wantsLayer = true
@@ -337,7 +373,7 @@ private final class TranscriptionCardView: NSView {
 
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         textLabel.font = .systemFont(ofSize: 15, weight: .regular)
-        textLabel.maximumNumberOfLines = 2
+        textLabel.maximumNumberOfLines = 4
         textLabel.lineBreakMode = .byTruncatingTail
 
         let divider = NSBox()
@@ -351,28 +387,57 @@ private final class TranscriptionCardView: NSView {
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
         timeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
 
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.target = self
+        copyButton.action = #selector(copyClicked)
+
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteClicked)
+
+        toastLabel.translatesAutoresizingMaskIntoConstraints = false
+        toastLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        toastLabel.textColor = Palette.accentGreen
+        toastLabel.alphaValue = 0.0
+
         addSubview(textLabel)
+        addSubview(copyButton)
+        addSubview(deleteButton)
+        addSubview(toastLabel)
         addSubview(divider)
         addSubview(dateLabel)
         addSubview(timeLabel)
 
         NSLayoutConstraint.activate([
-            textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 26),
+            textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 20),
             textLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            textLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            textLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -10),
 
-            divider.topAnchor.constraint(equalTo: textLabel.bottomAnchor, constant: 24),
+            copyButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            copyButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -6),
+            copyButton.widthAnchor.constraint(equalToConstant: 28),
+            copyButton.heightAnchor.constraint(equalToConstant: 28),
+
+            deleteButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            deleteButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            deleteButton.widthAnchor.constraint(equalToConstant: 28),
+            deleteButton.heightAnchor.constraint(equalToConstant: 28),
+
+            toastLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -6),
+            toastLabel.centerYAnchor.constraint(equalTo: copyButton.centerYAnchor),
+
+            divider.topAnchor.constraint(equalTo: textLabel.bottomAnchor, constant: 18),
             divider.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             divider.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
 
-            dateLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 16),
+            dateLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 12),
             dateLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             dateLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
 
-            timeLabel.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 4),
+            timeLabel.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 2),
             timeLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            timeLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -18),
+            timeLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
         ])
 
         refreshColors()
@@ -380,6 +445,25 @@ private final class TranscriptionCardView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func copyClicked() {
+        onCopy(item.text)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            toastLabel.animator().alphaValue = 1.0
+        } completionHandler: {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.3
+                    self?.toastLabel.animator().alphaValue = 0.0
+                }
+            }
+        }
+    }
+
+    @objc private func deleteClicked() {
+        onDelete(item.id)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -406,11 +490,9 @@ private final class IconButton: NSButton {
             image = symbolImage
         }
         imagePosition = .imageOnly
-        imageScaling = .scaleNone
+        imageScaling = .scaleProportionallyUpOrDown
         isBordered = false
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.borderWidth = 1
+        wantsLayer = false
         refreshColors()
     }
 
@@ -424,9 +506,7 @@ private final class IconButton: NSButton {
     }
 
     private func refreshColors() {
-        layer?.backgroundColor = Palette.controlBackground.cgColor
-        layer?.borderColor = Palette.border.cgColor
-        contentTintColor = Palette.primaryText
+        contentTintColor = Palette.secondaryText
     }
 }
 
@@ -434,6 +514,11 @@ private final class IconButton: NSButton {
 
 private final class CircleRecordButton: NSButton {
     private var recording = false
+    private let coralColor = NSColor(red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
+
+    private let pillView = NSView()
+    private let micImageView = NSImageView()
+    private let statusLabel = NSTextField(labelWithString: "Right Shift and hold to record")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -441,15 +526,61 @@ private final class CircleRecordButton: NSButton {
         wantsLayer = true
         imagePosition = .noImage
         title = ""
-        setRecording(false)
+        setupViews()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func setupViews() {
+        pillView.translatesAutoresizingMaskIntoConstraints = false
+        pillView.wantsLayer = true
+        pillView.layer?.cornerRadius = 20
+        pillView.layer?.borderWidth = 1.5
+        pillView.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
+        pillView.layer?.shadowColor = NSColor.black.cgColor
+        pillView.layer?.shadowOpacity = 0.4
+        pillView.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        pillView.layer?.shadowRadius = 4
+
+        let micImage = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
+        micImageView.translatesAutoresizingMaskIntoConstraints = false
+        micImageView.image = micImage
+        micImageView.contentTintColor = .white
+        micImageView.imageScaling = .scaleProportionallyUpOrDown
+
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        statusLabel.textColor = .white
+        statusLabel.alignment = .left
+
+        pillView.addSubview(micImageView)
+        pillView.addSubview(statusLabel)
+        addSubview(pillView)
+
+        NSLayoutConstraint.activate([
+            pillView.topAnchor.constraint(equalTo: topAnchor),
+            pillView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            pillView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            pillView.trailingAnchor.constraint(equalTo: trailingAnchor),
+
+            micImageView.leadingAnchor.constraint(equalTo: pillView.leadingAnchor, constant: 18),
+            micImageView.centerYAnchor.constraint(equalTo: pillView.centerYAnchor),
+            micImageView.widthAnchor.constraint(equalToConstant: 16),
+            micImageView.heightAnchor.constraint(equalToConstant: 18),
+
+            statusLabel.leadingAnchor.constraint(equalTo: micImageView.trailingAnchor, constant: 10),
+            statusLabel.trailingAnchor.constraint(equalTo: pillView.trailingAnchor, constant: -18),
+            statusLabel.centerYAnchor.constraint(equalTo: pillView.centerYAnchor),
+        ])
+
+        refreshColors()
+    }
+
     func setRecording(_ value: Bool) {
         recording = value
+        statusLabel.stringValue = recording ? "Recording..." : "Right Shift and hold to record"
         refreshColors()
     }
 
@@ -459,18 +590,29 @@ private final class CircleRecordButton: NSButton {
     }
 
     func refreshColors() {
-        layer?.cornerRadius = 26
-        layer?.backgroundColor = recording ? Palette.recording.cgColor : Palette.recordIdle.cgColor
-        layer?.shadowColor = (recording ? Palette.recording : Palette.recordIdle).cgColor
-        layer?.shadowOpacity = recording ? 0.85 : 0.45
-        layer?.shadowRadius = recording ? 24 : 18
-        layer?.shadowOffset = .zero
+        guard let layer = pillView.layer else { return }
+
+        if recording {
+            layer.backgroundColor = coralColor.withAlphaComponent(0.85).cgColor
+
+            let pulse = CABasicAnimation(keyPath: "backgroundColor")
+            pulse.fromValue = coralColor.withAlphaComponent(0.95).cgColor
+            pulse.toValue = coralColor.withAlphaComponent(0.35).cgColor
+            pulse.duration = 0.8
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(pulse, forKey: "recordingPulse")
+        } else {
+            layer.removeAnimation(forKey: "recordingPulse")
+            layer.backgroundColor = coralColor.withAlphaComponent(0.85).cgColor
+        }
     }
 }
 
 // MARK: - ThemeAwareView
 
-private final class ThemeAwareView: NSView {
+private class ThemeAwareView: NSView {
     var onAppearanceChanged: (() -> Void)?
 
     override func viewDidChangeEffectiveAppearance() {
@@ -514,7 +656,12 @@ private enum Palette {
         dark: NSColor(calibratedWhite: 0.93, alpha: 1),
         light: NSColor(calibratedWhite: 0.12, alpha: 1)
     )
+    static let recordIdleText = dynamic(
+        dark: NSColor(calibratedWhite: 0.12, alpha: 1),
+        light: NSColor(calibratedWhite: 0.93, alpha: 1)
+    )
     static let recording = NSColor(calibratedRed: 0.99, green: 0.38, blue: 0.36, alpha: 1)
+    static let accentGreen = NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.50, alpha: 1)
 
     private static func dynamic(dark: NSColor, light: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in

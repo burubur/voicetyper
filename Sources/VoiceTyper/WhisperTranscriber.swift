@@ -84,12 +84,12 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     static var configuredModelFilename: String {
         // 1. Check macOS UserDefaults (UI User Selection takes priority)
         if let def = UserDefaults.standard.string(forKey: "WHISPER_MODEL"), !def.isEmpty {
-            return def.hasSuffix(".bin") ? def : "\(def).bin"
+            return def.contains("parakeet") ? def : (def.hasSuffix(".bin") ? def : "\(def).bin")
         }
 
         // 2. Check environment variable
         if let env = ProcessInfo.processInfo.environment["WHISPER_MODEL"], !env.isEmpty {
-            return env.hasSuffix(".bin") ? env : "\(env).bin"
+            return env.contains("parakeet") ? env : (env.hasSuffix(".bin") ? env : "\(env).bin")
         }
 
         // 3. Check local `.xcconfig` file
@@ -102,13 +102,13 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
                 }
                 if parts.count == 2, parts[0] == "WHISPER_MODEL" {
                     let model = parts[1]
-                    return model.hasSuffix(".bin") ? model : "\(model).bin"
+                    return model.contains("parakeet") ? model : (model.hasSuffix(".bin") ? model : "\(model).bin")
                 }
             }
         }
 
-        // Default
-        return "ggml-base.en.bin"
+        // Default: NVIDIA Parakeet Unified 0.6B (ONNX)
+        return "parakeet-unified-0.6b"
     }
 
     /// Resolved model file URL based on configuration
@@ -117,11 +117,25 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     }
 
     /// Checks if the configured model file exists and prints instructions if missing.
-    /// - Returns: The model URL if it exists, nil otherwise.
+    /// Falls back to any downloaded model if configured model is missing.
+    /// - Returns: The model URL if it exists or a downloaded fallback exists, nil otherwise.
     static func resolveModelURL() -> URL? {
         let url = defaultModelURL
         if FileManager.default.fileExists(atPath: url.path) {
             return url
+        }
+
+        // Fallback: check if any available model is downloaded
+        for option in availableModels {
+            if isModelDownloaded(filename: option.filename) {
+                let modelFilename = option.filename.contains("parakeet") ? option.filename : (option.filename.hasSuffix(".bin") ? option.filename : "\(option.filename).bin")
+                let fallbackURL = defaultModelDirectory.appendingPathComponent(modelFilename)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    print("⚠️  Configured model '\(configuredModelFilename)' not found. Falling back to downloaded model '\(option.filename)'.")
+                    UserDefaults.standard.set(option.filename, forKey: "WHISPER_MODEL")
+                    return fallbackURL
+                }
+            }
         }
 
         print(

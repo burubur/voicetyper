@@ -20,6 +20,9 @@ final class App: NSObject, NSApplicationDelegate {
     /// Queues transcriptions sequentially to prevent SwiftWhisper `instanceBusy` errors.
     private var transcriptionTask: Task<Void, Never>?
 
+    /// Models currently being downloaded in the background.
+    private var downloadingModels: Set<String> = []
+
     // MARK: - App Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -72,7 +75,12 @@ final class App: NSObject, NSApplicationDelegate {
         let currentOption = WhisperTranscriber.availableModels.first { $0.filename.lowercased() == currentModel.lowercased() }
         let modelTitle = currentOption?.displayName ?? currentModel
 
-        let titleItem = NSMenuItem(title: "VoiceTyper (\(modelTitle))", action: nil, keyEquivalent: "")
+        var headerTitle = "VoiceTyper (\(modelTitle))"
+        if !downloadingModels.isEmpty {
+            headerTitle += " — Downloading model..."
+        }
+
+        let titleItem = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         menu.addItem(NSMenuItem.separator())
@@ -83,13 +91,25 @@ final class App: NSObject, NSApplicationDelegate {
         for option in WhisperTranscriber.availableModels {
             let isCurrent = option.filename.lowercased() == currentModel.lowercased()
             let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
-            let statusSuffix = isDownloaded ? "" : " (Download needed)"
+            let isDownloading = downloadingModels.contains(option.filename)
+
+            let statusSuffix: String
+            if isDownloading {
+                statusSuffix = " (Downloading...)"
+            } else if isDownloaded {
+                statusSuffix = ""
+            } else {
+                statusSuffix = " (Download needed)"
+            }
             let itemTitle = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
 
             let item = NSMenuItem(title: itemTitle, action: #selector(modelSubmenuItemClicked(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = option.filename
             item.state = isCurrent ? .on : .off
+            if isDownloading {
+                item.isEnabled = false
+            }
             modelSubmenu.addItem(item)
         }
 
@@ -111,16 +131,64 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.onMicPressed = { [weak self] in
             guard let self else { return }
             self.showHistoryWindow()
-            print("🎙️ Hold Right Shift to record.")
+            print("🎙️ Right Shift and hold to record.")
         }
 
-        historyWindowController.onSettingsPressed = { [weak self] in
+        historyWindowController.onSettingsPressed = { [weak self] view in
             guard let self else { return }
-            self.showHistoryWindow()
-            print("⚙️ Settings are not configured yet.")
+            self.showModelMenu(anchoredAt: view)
         }
 
         historyWindowController.showWindow(nil)
+    }
+
+    func showModelMenu(anchoredAt view: NSView) {
+        let menu = NSMenu()
+        let currentModel = WhisperTranscriber.configuredModelFilename
+
+        let headerItem = NSMenuItem(title: "Select Speech Model", action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        menu.addItem(NSMenuItem.separator())
+
+        for option in WhisperTranscriber.availableModels {
+            let isCurrent = option.filename.lowercased() == currentModel.lowercased()
+            let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
+            let isDownloading = downloadingModels.contains(option.filename)
+
+            let statusSuffix: String
+            if isDownloading {
+                statusSuffix = " (Downloading...)"
+            } else if isDownloaded {
+                statusSuffix = ""
+            } else {
+                statusSuffix = " (Download needed)"
+            }
+            let itemTitle = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
+
+            let item = NSMenuItem(title: itemTitle, action: #selector(modelSubmenuItemClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.filename
+            item.state = isCurrent ? .on : .off
+            if isDownloading {
+                item.isEnabled = false
+            }
+            menu.addItem(item)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+        let openFolderItem = NSMenuItem(title: "Open Model Directory (~/.voicetyper)", action: #selector(openModelFolder), keyEquivalent: "")
+        openFolderItem.target = self
+        menu.addItem(openFolderItem)
+
+        let location = NSPoint(x: 0, y: view.bounds.height + 4)
+        menu.popUp(positioning: nil, at: location, in: view)
+    }
+
+    @objc private func openModelFolder() {
+        let dir = WhisperTranscriber.defaultModelDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
     }
 
     private func loadModel() {
@@ -140,13 +208,22 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     func switchModel(filename: String) {
+        if downloadingModels.contains(filename) {
+            let alert = NSAlert()
+            alert.messageText = "Download in Progress"
+            alert.informativeText = "The model '\(filename)' is currently downloading in the background."
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+
         let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: filename)
 
         if !isDownloaded {
             let alert = NSAlert()
             alert.messageText = "Download Speech Model"
-            alert.informativeText = "The model '\(filename)' is not downloaded yet at ~/.voicetyper/\n\nWould you like to download it now?"
-            alert.addButton(withTitle: "Download Now")
+            alert.informativeText = "The model '\(filename)' is not downloaded yet at ~/.voicetyper/\n\nWould you like to download it now in the background?"
+            alert.addButton(withTitle: "Download in Background")
             alert.addButton(withTitle: "Cancel")
             alert.alertStyle = .informational
 
@@ -172,25 +249,63 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     private func downloadAndLoadModel(filename: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        guard !downloadingModels.contains(filename) else { return }
 
-        let scriptPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("download-models.sh").path
+        downloadingModels.insert(filename)
+        rebuildMenuBar()
 
-        process.arguments = [scriptPath, filename]
+        print("📥 Starting background download for model \(filename)...")
 
-        print("📥 Downloading model \(filename)...")
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus == 0 {
-                switchModel(filename: filename)
-            } else {
-                print("❌ Failed to download model \(filename)")
+        let currentDir = FileManager.default.currentDirectoryPath
+
+        Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+
+            var scriptPath = URL(fileURLWithPath: currentDir)
+                .appendingPathComponent("download-models.sh").path
+
+            if !FileManager.default.fileExists(atPath: scriptPath) {
+                if let bundleScript = Bundle.main.path(forResource: "download-models", ofType: "sh") {
+                    scriptPath = bundleScript
+                }
             }
-        } catch {
-            print("❌ Error running download script: \(error)")
+
+            process.arguments = [scriptPath, filename]
+
+            var success = false
+            do {
+                try process.run()
+                process.waitUntilExit()
+                success = (process.terminationStatus == 0)
+            } catch {
+                print("❌ Error running download script: \(error)")
+                success = false
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                self.downloadingModels.remove(filename)
+                self.rebuildMenuBar()
+
+                if success {
+                    print("✅ Download completed for \(filename)")
+                    self.switchModel(filename: filename)
+
+                    let alert = NSAlert()
+                    alert.messageText = "Download Complete"
+                    alert.informativeText = "The model '\(filename)' was successfully downloaded and activated."
+                    alert.alertStyle = .informational
+                    alert.runModal()
+                } else {
+                    print("❌ Failed to download model \(filename)")
+                    let alert = NSAlert()
+                    alert.messageText = "Download Failed"
+                    alert.informativeText = "Failed to download model '\(filename)'. Please check your network connection and try again."
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
         }
     }
 

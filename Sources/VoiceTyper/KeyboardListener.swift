@@ -85,14 +85,33 @@ final class KeyboardListener: @unchecked Sendable {
         else {
             print("❌ Failed to create event tap. Grant Accessibility permissions in:")
             print("   System Settings > Privacy & Security > Accessibility")
+            Task { @MainActor in
+                self.showAccessibilityAlert()
+            }
             return
         }
 
         self.eventTap = tap
         let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        print("⌨️  Key listener active. Hold 'Right Shift' to dictate.")
+        print("⌨️  Key listener active. Right Shift and hold to record.")
+    }
+
+    @MainActor
+    private func showAccessibilityAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Accessibility Permission Required"
+        alert.informativeText = "VoiceTyper needs Accessibility permission to detect the Right Shift key for dictation.\n\nPlease grant Accessibility access in System Settings > Privacy & Security > Accessibility."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     // MARK: - Event Handling
@@ -118,10 +137,12 @@ final class KeyboardListener: @unchecked Sendable {
         // Only respond to Right Shift key (keyCode 0x3C = 60)
         guard keyCode == rightShiftKeyCode else { return }
 
-        // Inspect physical Right Shift bit flag (0x04) to avoid false positives when Left Shift is down
-        let isRightShiftDown = (event.flags.rawValue & nxDeviceRightShiftMask) != 0
+        // Check if Right Shift is pressed down.
+        // CGEventFlags.maskShift indicates Shift modifier state.
+        // We also check (event.flags.rawValue & nxDeviceRightShiftMask) != 0 for hardware mask compatibility.
+        let isShiftDown = event.flags.contains(.maskShift) || (event.flags.rawValue & nxDeviceRightShiftMask) != 0
 
-        if isRightShiftDown {
+        if isShiftDown {
             if !isKeyPressed {
                 handleKeyDown()
             }
@@ -134,9 +155,20 @@ final class KeyboardListener: @unchecked Sendable {
 
     private func handleKeyDown() {
         let now = ProcessInfo.processInfo.systemUptime
+        let timeSinceLastRelease = now - lastReleaseTime
+        let timeSinceLastPress = now - lastPressTime
 
         lastPressTime = now
         isKeyPressed = true
+
+        // Double-tap abort: if user taps Right Shift twice rapidly (< 300ms since release)
+        if isRecording, timeSinceLastRelease < 0.3, timeSinceLastPress < 0.6 {
+            print("🛑 Double-tap detected! Aborting dictation...")
+            cancelGraceTimer()
+            isRecording = false
+            Task { @MainActor in delegate?.keyboardListenerDidAbort() }
+            return
+        }
 
         if !isRecording {
             // Fresh start
@@ -153,20 +185,7 @@ final class KeyboardListener: @unchecked Sendable {
         isKeyPressed = false
         lastReleaseTime = ProcessInfo.processInfo.systemUptime
 
-        let holdDuration = lastReleaseTime - lastPressTime
-
-        // If the user tapped the key quickly (under 250ms), we consider it an abort.
-        // This handles "Double Tap Abort" because the second press of a double-tap
-        // will have a very short hold duration. It also catches accidental single taps.
-        if holdDuration < 0.25, isRecording {
-            print("🛑 Quick tap detected! Aborting recording...")
-            cancelGraceTimer()
-            isRecording = false
-            Task { @MainActor in delegate?.keyboardListenerDidAbort() }
-            return
-        }
-
-        // Start grace period timer
+        // Start grace period timer to finalize recording
         startGraceTimer()
     }
 

@@ -8,7 +8,8 @@ INSTALL_DIR="/usr/local/bin"
 BINARY_PATH="$INSTALL_DIR/voicetyper"
 
 echo "🛑 Stopping running instances..."
-pkill -i -f "voicetyper" || true
+pkill -i -x "VoiceTyper" 2>/dev/null || true
+pkill -i -x "voicetyper" 2>/dev/null || true
 
 # 1. Remove the binary
 if [ -f "$BINARY_PATH" ]; then

@@ -36,7 +36,7 @@ final class FloatingRecordingIndicator {
             win.ignoresMouseEvents = false
             win.hasShadow = false
 
-            // Create a minimal recording circle
+            // Create a minimal recording circle containing only the mic icon
             let container = ClickableContainerView(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
             container.wantsLayer = true
             container.onMouseDown = { [weak self] in
@@ -58,7 +58,7 @@ final class FloatingRecordingIndicator {
             circle.layer?.shadowOffset = CGSize(width: 0, height: -2)
             circle.layer?.shadowRadius = 3
 
-            // Native macOS SF Symbol (much cleaner than the emoji)
+            // Native macOS SF Symbol mic icon only
             let micImage = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
             let imageView = NSImageView(frame: NSRect(x: 7, y: 6, width: 14, height: 16))
             imageView.image = micImage
@@ -109,11 +109,7 @@ final class FloatingRecordingIndicator {
 
     /// Places the indicator at the bottom center of the active screen.
     private func getIndicatorPosition() -> NSPoint {
-        // `NSScreen.main` returns the screen with keyboard focus,
-        // or the screen where the mouse is if no window is focused.
         let screen = NSScreen.main ?? NSScreen.screens.first!
-
-        // visibleFrame accounts for the Dock and Menu bar
         let screenFrame = screen.visibleFrame
 
         let indicatorWidth: CGFloat = 32.0  // Matches the window width from show()
