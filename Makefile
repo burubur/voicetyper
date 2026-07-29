@@ -1,4 +1,12 @@
-.PHONY: download-models debug install uninstall clean
+.PHONY: build run download-models debug install uninstall clean
+
+# Builds the VoiceTyper executable target
+build:
+	swift build
+
+# Runs the VoiceTyper executable
+run:
+	swift run VoiceTyper
 
 # Downloads all defined voice transcriber models sequentially via the bash script
 download-models:
