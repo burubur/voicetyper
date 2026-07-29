@@ -145,31 +145,35 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     func switchModel(filename: String) {
-        let modelFilename = filename.hasSuffix(".bin") ? filename : "\(filename).bin"
-        let modelURL = WhisperTranscriber.defaultModelDirectory.appendingPathComponent(modelFilename)
+        let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: filename)
 
-        if !FileManager.default.fileExists(atPath: modelURL.path) {
+        if !isDownloaded {
             let alert = NSAlert()
-            alert.messageText = "Download Whisper Model"
-            alert.informativeText = "The model file '\(modelFilename)' is not downloaded yet at ~/.voicetyper/\n\nWould you like to download it now?"
+            alert.messageText = "Download Speech Model"
+            alert.informativeText = "The model '\(filename)' is not downloaded yet at ~/.voicetyper/\n\nWould you like to download it now?"
             alert.addButton(withTitle: "Download Now")
             alert.addButton(withTitle: "Cancel")
             alert.alertStyle = .informational
 
             if alert.runModal() == .alertFirstButtonReturn {
-                downloadAndLoadModel(filename: modelFilename)
+                downloadAndLoadModel(filename: filename)
             }
             return
         }
 
+        let modelFilename = filename.contains("parakeet") ? filename : (filename.hasSuffix(".bin") ? filename : "\(filename).bin")
+        let modelURL = WhisperTranscriber.defaultModelDirectory.appendingPathComponent(modelFilename)
+
         do {
-            transcriber = try WhisperTranscriber(modelURL: modelURL)
-            UserDefaults.standard.set(modelFilename, forKey: "WHISPER_MODEL")
-            historyWindowController.setSelectedModel(modelFilename)
+            if !filename.contains("parakeet") {
+                transcriber = try WhisperTranscriber(modelURL: modelURL)
+            }
+            UserDefaults.standard.set(filename, forKey: "WHISPER_MODEL")
+            historyWindowController.setSelectedModel(filename)
             rebuildMenuBar()
-            print("✅ Switched Whisper model to: \(modelFilename)")
+            print("✅ Switched model to: \(filename)")
         } catch {
-            print("❌ Failed to switch Whisper model to \(modelFilename): \(error)")
+            print("❌ Failed to switch model to \(filename): \(error)")
         }
     }
 

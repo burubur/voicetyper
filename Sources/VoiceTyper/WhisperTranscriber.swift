@@ -52,15 +52,24 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     }
 
     static let availableModels: [ModelOption] = [
-        ModelOption(filename: "ggml-tiny.en.bin", displayName: "Tiny English", sizeDescription: "~75MB (Fastest)"),
-        ModelOption(filename: "ggml-base.en.bin", displayName: "Base English", sizeDescription: "~142MB (Balanced)"),
-        ModelOption(filename: "ggml-small.en.bin", displayName: "Small English", sizeDescription: "~466MB (Accurate)"),
-        ModelOption(filename: "ggml-medium.en.bin", displayName: "Medium English", sizeDescription: "~1.5GB (High Accuracy)"),
-        ModelOption(filename: "ggml-large-v3.bin", displayName: "Large v3 Multilingual", sizeDescription: "~3.1GB (Max Accuracy)")
+        ModelOption(filename: "ggml-tiny.en.bin", displayName: "Tiny English (Whisper)", sizeDescription: "~75MB (Fastest)"),
+        ModelOption(filename: "ggml-base.en.bin", displayName: "Base English (Whisper)", sizeDescription: "~142MB (Balanced)"),
+        ModelOption(filename: "ggml-small.en.bin", displayName: "Small English (Whisper)", sizeDescription: "~466MB (Accurate)"),
+        ModelOption(filename: "ggml-medium.en.bin", displayName: "Medium English (Whisper)", sizeDescription: "~1.5GB (High Accuracy)"),
+        ModelOption(filename: "ggml-large-v3.bin", displayName: "Large v3 Multilingual (Whisper)", sizeDescription: "~3.1GB (Max Accuracy)"),
+        ModelOption(filename: "parakeet-tdt-1.1b", displayName: "NVIDIA Parakeet TDT 1.1B (ONNX)", sizeDescription: "~480MB (3x-5x Fast STT)"),
+        ModelOption(filename: "parakeet-ctc-0.6b", displayName: "NVIDIA Parakeet CTC 0.6B (ONNX)", sizeDescription: "~240MB (Ultra Fast)")
     ]
 
-    /// Checks if a given model file exists in `~/.voicetyper/`
+    /// Checks if a given model file or directory exists in `~/.voicetyper/`
     static func isModelDownloaded(filename: String) -> Bool {
+        if filename.contains("parakeet") {
+            let clean = filename.replacingOccurrences(of: "sherpa-onnx-", with: "")
+            let dirName = "sherpa-onnx-\(clean)"
+            let dirURL = defaultModelDirectory.appendingPathComponent(dirName)
+            let fileURL = defaultModelDirectory.appendingPathComponent("\(clean).onnx")
+            return FileManager.default.fileExists(atPath: dirURL.path) || FileManager.default.fileExists(atPath: fileURL.path)
+        }
         let name = filename.hasSuffix(".bin") ? filename : "\(filename).bin"
         let url = defaultModelDirectory.appendingPathComponent(name)
         return FileManager.default.fileExists(atPath: url.path)
