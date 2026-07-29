@@ -57,18 +57,18 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         ModelOption(filename: "ggml-small.en.bin", displayName: "Small English (Whisper)", sizeDescription: "~466MB (Accurate)"),
         ModelOption(filename: "ggml-medium.en.bin", displayName: "Medium English (Whisper)", sizeDescription: "~1.5GB (High Accuracy)"),
         ModelOption(filename: "ggml-large-v3.bin", displayName: "Large v3 Multilingual (Whisper)", sizeDescription: "~3.1GB (Max Accuracy)"),
-        ModelOption(filename: "parakeet-tdt-1.1b", displayName: "NVIDIA Parakeet TDT 1.1B (ONNX)", sizeDescription: "~480MB (3x-5x Fast STT)"),
-        ModelOption(filename: "parakeet-ctc-0.6b", displayName: "NVIDIA Parakeet CTC 0.6B (ONNX)", sizeDescription: "~240MB (Ultra Fast)")
+        ModelOption(filename: "parakeet-unified-0.6b", displayName: "NVIDIA Parakeet Unified 0.6B (ONNX)", sizeDescription: "~240MB (3x-5x Fast STT)"),
+        ModelOption(filename: "parakeet-tdt-110m", displayName: "NVIDIA Parakeet TDT 110M (ONNX)", sizeDescription: "~110MB (Ultra Fast)")
     ]
 
     /// Checks if a given model file or directory exists in `~/.voicetyper/`
     static func isModelDownloaded(filename: String) -> Bool {
         if filename.contains("parakeet") {
-            let clean = filename.replacingOccurrences(of: "sherpa-onnx-", with: "")
-            let dirName = "sherpa-onnx-\(clean)"
-            let dirURL = defaultModelDirectory.appendingPathComponent(dirName)
-            let fileURL = defaultModelDirectory.appendingPathComponent("\(clean).onnx")
-            return FileManager.default.fileExists(atPath: dirURL.path) || FileManager.default.fileExists(atPath: fileURL.path)
+            let assetName = filename.contains("110m")
+                ? "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+                : "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
+            let dirURL = defaultModelDirectory.appendingPathComponent(assetName)
+            return FileManager.default.fileExists(atPath: dirURL.path)
         }
         let name = filename.hasSuffix(".bin") ? filename : "\(filename).bin"
         let url = defaultModelDirectory.appendingPathComponent(name)

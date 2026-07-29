@@ -13,7 +13,7 @@ MODELS=(
     "ggml-tiny.en.bin"
     "ggml-base.en.bin"
     "ggml-small.en.bin"
-    "parakeet-tdt-1.1b"
+    "parakeet-unified-0.6b"
 )
 
 # Function to download a single model
@@ -22,27 +22,39 @@ download_model() {
     mkdir -p "$MODEL_DIR"
 
     if [[ "$RAW_NAME" == *"parakeet"* ]]; then
-        local CLEAN_NAME="${RAW_NAME%.onnx}"
-        CLEAN_NAME="${CLEAN_NAME%.tar.bz2}"
-        if [[ "$CLEAN_NAME" != sherpa-onnx-* ]]; then
-            CLEAN_NAME="sherpa-onnx-${CLEAN_NAME}"
-        fi
+        local ASSET_NAME=""
+        case "$RAW_NAME" in
+            *"110m"*)
+                ASSET_NAME="sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+                ;;
+            *)
+                ASSET_NAME="sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
+                ;;
+        esac
 
-        local TARGET_DIR="$MODEL_DIR/${CLEAN_NAME}"
-        local TARGET_FILE="$MODEL_DIR/${CLEAN_NAME}.onnx"
+        local TARGET_DIR="$MODEL_DIR/${ASSET_NAME}"
 
-        if [ -d "$TARGET_DIR" ] || [ -f "$TARGET_FILE" ]; then
-            echo "✅ Parakeet model already exists: ${CLEAN_NAME}"
+        if [ -d "$TARGET_DIR" ]; then
+            echo "✅ Parakeet model already exists: ${ASSET_NAME}"
             return
         fi
 
-        echo "📥 Downloading NVIDIA Parakeet model (${CLEAN_NAME})..."
-        local TAR_FILE="$MODEL_DIR/${CLEAN_NAME}.tar.bz2"
-        curl -L --progress-bar -o "$TAR_FILE" "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${CLEAN_NAME}.tar.bz2"
-        tar -xjf "$TAR_FILE" -C "$MODEL_DIR"
+        echo "📥 Downloading NVIDIA Parakeet model (${ASSET_NAME})..."
+        local TAR_FILE="$MODEL_DIR/${ASSET_NAME}.tar.bz2"
+
+        # Remove any lingering invalid archive file from previous failed attempts
         rm -f "$TAR_FILE"
-        echo "✅ Parakeet download complete: $MODEL_DIR/${CLEAN_NAME}"
-        echo "----------------------------------------"
+
+        if curl -fL --progress-bar -o "$TAR_FILE" "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${ASSET_NAME}.tar.bz2"; then
+            tar -xjf "$TAR_FILE" -C "$MODEL_DIR"
+            rm -f "$TAR_FILE"
+            echo "✅ Parakeet download complete: $TARGET_DIR"
+            echo "----------------------------------------"
+        else
+            rm -f "$TAR_FILE"
+            echo "❌ Failed to download Parakeet model: ${ASSET_NAME}"
+            return 1
+        fi
         return
     fi
 
@@ -50,15 +62,20 @@ download_model() {
     local MODEL_NAME="${RAW_NAME%.bin}"
     local MODEL_FILE="$MODEL_DIR/${MODEL_NAME}.bin"
 
-    if [ -f "$MODEL_FILE" ]; then
+    if [ -f "$MODEL_FILE" ] && [ -s "$MODEL_FILE" ]; then
         echo "✅ Model already exists: ${MODEL_NAME}.bin"
         return
     fi
 
     echo "📥 Downloading ${MODEL_NAME}.bin..."
-    curl -L --progress-bar -o "$MODEL_FILE" "${WHISPER_BASE_URL}/${MODEL_NAME}.bin"
-    echo "✅ Download complete: $MODEL_FILE"
-    echo "----------------------------------------"
+    if curl -fL --progress-bar -o "$MODEL_FILE" "${WHISPER_BASE_URL}/${MODEL_NAME}.bin"; then
+        echo "✅ Download complete: $MODEL_FILE"
+        echo "----------------------------------------"
+    else
+        rm -f "$MODEL_FILE"
+        echo "❌ Failed to download Whisper model: ${MODEL_NAME}.bin"
+        return 1
+    fi
 }
 
 # Check if a specific model was requested

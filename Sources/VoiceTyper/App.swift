@@ -117,14 +117,9 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.onSettingsPressed = { [weak self] in
             guard let self else { return }
             self.showHistoryWindow()
+            print("⚙️ Settings are not configured yet.")
         }
 
-        historyWindowController.onModelSelected = { [weak self] filename in
-            guard let self else { return }
-            self.switchModel(filename: filename)
-        }
-
-        historyWindowController.setSelectedModel(WhisperTranscriber.configuredModelFilename)
         historyWindowController.showWindow(nil)
     }
 
@@ -169,7 +164,6 @@ final class App: NSObject, NSApplicationDelegate {
                 transcriber = try WhisperTranscriber(modelURL: modelURL)
             }
             UserDefaults.standard.set(filename, forKey: "WHISPER_MODEL")
-            historyWindowController.setSelectedModel(filename)
             rebuildMenuBar()
             print("✅ Switched model to: \(filename)")
         } catch {

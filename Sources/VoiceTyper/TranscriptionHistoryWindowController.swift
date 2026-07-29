@@ -14,10 +14,6 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
     var onMicPressed: (() -> Void)?
     var onClearPressed: (() -> Void)?
     var onSettingsPressed: (() -> Void)?
-    var onModelSelected: ((String) -> Void)?
-
-    private var activeModelFilename: String = WhisperTranscriber.configuredModelFilename
-    private let modelPillButton = NSButton()
 
     private var items: [TranscriptionHistoryItem] = []
     private var filteredItems: [TranscriptionHistoryItem] = []
@@ -86,46 +82,9 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         recordButton.setRecording(recording)
     }
 
-    func setSelectedModel(_ filename: String) {
-        activeModelFilename = filename
-        let shortName = filename.replacingOccurrences(of: "ggml-", with: "").replacingOccurrences(of: ".bin", with: "")
-        modelPillButton.title = "⚡ \(shortName)"
-    }
-
     func clearHistory() {
         items.removeAll()
         applyFilter()
-    }
-
-    private func presentModelMenu(from sender: NSView) {
-        let menu = NSMenu(title: "Select Whisper Model")
-
-        let headerItem = NSMenuItem(title: "Select Whisper Model:", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        menu.addItem(headerItem)
-        menu.addItem(NSMenuItem.separator())
-
-        for option in WhisperTranscriber.availableModels {
-            let isCurrent = option.filename.lowercased() == activeModelFilename.lowercased()
-            let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
-            let statusSuffix = isDownloaded ? "" : " (Download needed)"
-
-            let itemTitle = "\(isCurrent ? "✓ " : "   ")\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
-            let item = NSMenuItem(title: itemTitle, action: #selector(modelMenuItemSelected(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = option.filename
-            item.state = isCurrent ? .on : .off
-            menu.addItem(item)
-        }
-
-        let event = NSApp.currentEvent ?? NSEvent()
-        NSMenu.popUpContextMenu(menu, with: event, for: sender)
-    }
-
-    @objc private func modelMenuItemSelected(_ sender: NSMenuItem) {
-        guard let filename = sender.representedObject as? String else { return }
-        setSelectedModel(filename)
-        onModelSelected?(filename)
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -246,26 +205,13 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
 
         let micButton = iconButton(symbol: "mic.fill", action: #selector(recordButtonPressed))
         let clearButton = iconButton(symbol: "trash", action: #selector(clearButtonPressed))
-        let settingsButton = iconButton(symbol: "gearshape", action: #selector(settingsButtonPressed(_:)))
-
-        modelPillButton.translatesAutoresizingMaskIntoConstraints = false
-        modelPillButton.bezelStyle = .inline
-        modelPillButton.isBordered = false
-        modelPillButton.wantsLayer = true
-        modelPillButton.layer?.backgroundColor = Palette.searchBackground.cgColor
-        modelPillButton.layer?.cornerRadius = 12
-        modelPillButton.font = .systemFont(ofSize: 12, weight: .medium)
-        modelPillButton.contentTintColor = Palette.primaryText
-        modelPillButton.target = self
-        modelPillButton.action = #selector(settingsButtonPressed(_:))
-        setSelectedModel(activeModelFilename)
+        let settingsButton = iconButton(symbol: "gearshape", action: #selector(settingsButtonPressed))
 
         bottomBar.addSubview(recordButton)
         bottomBar.addSubview(shortcutIcon)
         bottomBar.addSubview(shortcutLabel)
         bottomBar.addSubview(dropImage)
         bottomBar.addSubview(dropLabel)
-        bottomBar.addSubview(modelPillButton)
         bottomBar.addSubview(micButton)
         bottomBar.addSubview(clearButton)
         bottomBar.addSubview(settingsButton)
@@ -292,10 +238,6 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
             dropImage.heightAnchor.constraint(equalToConstant: 22),
             dropLabel.leadingAnchor.constraint(equalTo: dropImage.trailingAnchor, constant: 12),
             dropLabel.centerYAnchor.constraint(equalTo: dropImage.centerYAnchor),
-
-            modelPillButton.trailingAnchor.constraint(equalTo: micButton.leadingAnchor, constant: -12),
-            modelPillButton.centerYAnchor.constraint(equalTo: micButton.centerYAnchor),
-            modelPillButton.heightAnchor.constraint(equalToConstant: 28),
 
             micButton.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -12),
             clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -12),
@@ -337,8 +279,6 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         searchField.layer?.borderColor = Palette.border.cgColor
         emptyLabel.textColor = Palette.secondaryText
         recordButton.refreshColors()
-        modelPillButton.layer?.backgroundColor = Palette.searchBackground.cgColor
-        modelPillButton.contentTintColor = Palette.primaryText
         cardsStack.arrangedSubviews.forEach { view in
             (view as? TranscriptionCardView)?.refreshColors()
         }
@@ -373,8 +313,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSSearchFi
         onClearPressed?()
     }
 
-    @objc private func settingsButtonPressed(_ sender: NSView) {
-        presentModelMenu(from: sender)
+    @objc private func settingsButtonPressed() {
         onSettingsPressed?()
     }
 }
