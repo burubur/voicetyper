@@ -31,11 +31,15 @@ final class KeyboardListener: @unchecked Sendable {
     private let gracePeriodSeconds: TimeInterval = 0.8
 
     private var graceTimer: DispatchSourceTimer?
+    private var eventTap: CFMachPort?
 
     /// The modifier flag for Right Shift key.
     /// CGEvent reports Right Shift as `.maskShift` combined with keyCode check.
     /// We use flagsChanged event and check the raw keyCode for right shift (0x3C).
     private let rightShiftKeyCode: UInt16 = 0x3C
+
+    /// Physical Right Shift device bitmask in CGEvent raw flags (0x04 / NX_DEVICERSHIFTKEYMASK).
+    private let nxDeviceRightShiftMask: UInt64 = 0x00000004
 
     /// The key code for the 'C' key.
     private let cKeyCode: UInt16 = 0x08
@@ -47,7 +51,7 @@ final class KeyboardListener: @unchecked Sendable {
             (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
         guard
-            let eventTap = CGEvent.tapCreate(
+            let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
                 place: .headInsertEventTap,
                 options: .defaultTap,
@@ -58,6 +62,14 @@ final class KeyboardListener: @unchecked Sendable {
                     }
                     let listener = Unmanaged<KeyboardListener>.fromOpaque(refcon)
                         .takeUnretainedValue()
+
+                    // Handle tap disabled by timeout/user input recovery
+                    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                        if let eventTap = listener.eventTap {
+                            CGEvent.tapEnable(tap: eventTap, enable: true)
+                        }
+                        return Unmanaged.passRetained(event)
+                    }
 
                     if type == .flagsChanged {
                         listener.handleFlagsChanged(event: event)
@@ -76,9 +88,10 @@ final class KeyboardListener: @unchecked Sendable {
             return
         }
 
-        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        self.eventTap = tap
+        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: eventTap, enable: true)
+        CGEvent.tapEnable(tap: tap, enable: true)
         print("⌨️  Key listener active. Hold 'Right Shift' to dictate.")
     }
 
@@ -102,15 +115,20 @@ final class KeyboardListener: @unchecked Sendable {
     private func handleFlagsChanged(event: CGEvent) {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
 
-        // Only respond to Right Shift key
+        // Only respond to Right Shift key (keyCode 0x3C = 60)
         guard keyCode == rightShiftKeyCode else { return }
 
-        let isShiftDown = event.flags.contains(.maskShift)
+        // Inspect physical Right Shift bit flag (0x04) to avoid false positives when Left Shift is down
+        let isRightShiftDown = (event.flags.rawValue & nxDeviceRightShiftMask) != 0
 
-        if isShiftDown {
-            handleKeyDown()
+        if isRightShiftDown {
+            if !isKeyPressed {
+                handleKeyDown()
+            }
         } else {
-            handleKeyUp()
+            if isKeyPressed {
+                handleKeyUp()
+            }
         }
     }
 
