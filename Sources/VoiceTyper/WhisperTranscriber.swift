@@ -45,19 +45,45 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
 
     // MARK: - Model Discovery
 
+    struct ModelOption: Sendable, Equatable {
+        let filename: String
+        let displayName: String
+        let sizeDescription: String
+    }
+
+    static let availableModels: [ModelOption] = [
+        ModelOption(filename: "ggml-tiny.en.bin", displayName: "Tiny English", sizeDescription: "~75MB (Fastest)"),
+        ModelOption(filename: "ggml-base.en.bin", displayName: "Base English", sizeDescription: "~142MB (Balanced)"),
+        ModelOption(filename: "ggml-small.en.bin", displayName: "Small English", sizeDescription: "~466MB (Accurate)"),
+        ModelOption(filename: "ggml-medium.en.bin", displayName: "Medium English", sizeDescription: "~1.5GB (High Accuracy)"),
+        ModelOption(filename: "ggml-large-v3.bin", displayName: "Large v3 Multilingual", sizeDescription: "~3.1GB (Max Accuracy)")
+    ]
+
+    /// Checks if a given model file exists in `~/.voicetyper/`
+    static func isModelDownloaded(filename: String) -> Bool {
+        let name = filename.hasSuffix(".bin") ? filename : "\(filename).bin"
+        let url = defaultModelDirectory.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// Default model directory: `~/.voicetyper/`
     static var defaultModelDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".voicetyper")
     }
 
-    /// Model filename (configurable via WHISPER_MODEL env var, .xcconfig, or UserDefaults)
+    /// Model filename (configurable via UserDefaults UI selection, WHISPER_MODEL env var, or .xcconfig)
     static var configuredModelFilename: String {
-        // 1. Check environment variable
+        // 1. Check macOS UserDefaults (UI User Selection takes priority)
+        if let def = UserDefaults.standard.string(forKey: "WHISPER_MODEL"), !def.isEmpty {
+            return def.hasSuffix(".bin") ? def : "\(def).bin"
+        }
+
+        // 2. Check environment variable
         if let env = ProcessInfo.processInfo.environment["WHISPER_MODEL"], !env.isEmpty {
             return env.hasSuffix(".bin") ? env : "\(env).bin"
         }
 
-        // 2. Check local `.xcconfig` file
+        // 3. Check local `.xcconfig` file
         let xcconfigURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".xcconfig")
         if let content = try? String(contentsOf: xcconfigURL, encoding: .utf8) {
@@ -70,11 +96,6 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
                     return model.hasSuffix(".bin") ? model : "\(model).bin"
                 }
             }
-        }
-
-        // 3. Check macOS UserDefaults
-        if let def = UserDefaults.standard.string(forKey: "WHISPER_MODEL"), !def.isEmpty {
-            return def.hasSuffix(".bin") ? def : "\(def).bin"
         }
 
         // Default

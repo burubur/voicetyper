@@ -63,14 +63,48 @@ final class App: NSObject, NSApplicationDelegate {
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateIcon(symbol: "mic")
+        rebuildMenuBar()
+    }
 
+    private func rebuildMenuBar() {
         let menu = NSMenu()
-        menu.addItem(
-            NSMenuItem(title: "Show VoiceTyper", action: #selector(showHistoryWindow), keyEquivalent: ""))
+        let currentModel = WhisperTranscriber.configuredModelFilename
+        let currentOption = WhisperTranscriber.availableModels.first { $0.filename.lowercased() == currentModel.lowercased() }
+        let modelTitle = currentOption?.displayName ?? currentModel
+
+        let titleItem = NSMenuItem(title: "VoiceTyper (\(modelTitle))", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(
-            NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Show VoiceTyper", action: #selector(showHistoryWindow), keyEquivalent: ""))
+
+        // Model selection submenu
+        let modelSubmenu = NSMenu(title: "Select Model")
+        for option in WhisperTranscriber.availableModels {
+            let isCurrent = option.filename.lowercased() == currentModel.lowercased()
+            let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
+            let statusSuffix = isDownloaded ? "" : " (Download needed)"
+            let itemTitle = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
+
+            let item = NSMenuItem(title: itemTitle, action: #selector(modelSubmenuItemClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.filename
+            item.state = isCurrent ? .on : .off
+            modelSubmenu.addItem(item)
+        }
+
+        let modelSubmenuItem = NSMenuItem(title: "Select Whisper Model", action: nil, keyEquivalent: "")
+        modelSubmenuItem.submenu = modelSubmenu
+        menu.addItem(modelSubmenuItem)
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    @objc private func modelSubmenuItemClicked(_ sender: NSMenuItem) {
+        guard let filename = sender.representedObject as? String else { return }
+        switchModel(filename: filename)
     }
 
     private func setupHistoryWindow() {
@@ -83,9 +117,14 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.onSettingsPressed = { [weak self] in
             guard let self else { return }
             self.showHistoryWindow()
-            print("⚙️ Settings are not configured yet.")
         }
 
+        historyWindowController.onModelSelected = { [weak self] filename in
+            guard let self else { return }
+            self.switchModel(filename: filename)
+        }
+
+        historyWindowController.setSelectedModel(WhisperTranscriber.configuredModelFilename)
         historyWindowController.showWindow(nil)
     }
 
@@ -102,6 +141,58 @@ final class App: NSObject, NSApplicationDelegate {
         } catch {
             print("❌ Failed to load whisper model: \(error)")
             NSApplication.shared.terminate(self)
+        }
+    }
+
+    func switchModel(filename: String) {
+        let modelFilename = filename.hasSuffix(".bin") ? filename : "\(filename).bin"
+        let modelURL = WhisperTranscriber.defaultModelDirectory.appendingPathComponent(modelFilename)
+
+        if !FileManager.default.fileExists(atPath: modelURL.path) {
+            let alert = NSAlert()
+            alert.messageText = "Download Whisper Model"
+            alert.informativeText = "The model file '\(modelFilename)' is not downloaded yet at ~/.voicetyper/\n\nWould you like to download it now?"
+            alert.addButton(withTitle: "Download Now")
+            alert.addButton(withTitle: "Cancel")
+            alert.alertStyle = .informational
+
+            if alert.runModal() == .alertFirstButtonReturn {
+                downloadAndLoadModel(filename: modelFilename)
+            }
+            return
+        }
+
+        do {
+            transcriber = try WhisperTranscriber(modelURL: modelURL)
+            UserDefaults.standard.set(modelFilename, forKey: "WHISPER_MODEL")
+            historyWindowController.setSelectedModel(modelFilename)
+            rebuildMenuBar()
+            print("✅ Switched Whisper model to: \(modelFilename)")
+        } catch {
+            print("❌ Failed to switch Whisper model to \(modelFilename): \(error)")
+        }
+    }
+
+    private func downloadAndLoadModel(filename: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+
+        let scriptPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("download-models.sh").path
+
+        process.arguments = [scriptPath, filename]
+
+        print("📥 Downloading model \(filename)...")
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                switchModel(filename: filename)
+            } else {
+                print("❌ Failed to download model \(filename)")
+            }
+        } catch {
+            print("❌ Error running download script: \(error)")
         }
     }
 
