@@ -1,13 +1,13 @@
 # 4. Technical Specification: VoiceTyper
 
 **Architecture & Frameworks**
-VoiceTyper revolves around a native, headless background agent architecture tightly integrated with low-level macOS subsystems. This Low-Level Design (LLD) document outlines the granular engineering specifications, hardware integrations, and concurrency boundaries executed across the codebase.
+VoiceTyper revolves around a native, headless background agent architecture tightly integrated with low-level macOS subsystems and a lightweight floating/history GUI layer. This Low-Level Design (LLD) document outlines the granular engineering specifications, hardware integrations, and concurrency boundaries executed across the codebase.
 
 ---
 
 ## 1. Core Operating Environment
-- **Object Context:** Built strictly on macOS `NSApplicationDelegate` lifecycle without a standard graphical `NSWindow`.
-- **System Interface:** Registers an `NSStatusItem` in the system menu bar bridging system-tray status changes (🎙️, 🔴, ⏳) back to the internal state machine.
+- **Object Context:** Built on the macOS `NSApplicationDelegate` lifecycle, controlling system tray status items and a native `TranscriptionHistoryWindowController` window interface.
+- **System Interface:** Registers an `NSStatusItem` in the system menu bar bridging system-tray status changes (🎙️, 🔴, ⏳) back to the internal state machine and providing model selector menus.
 - **Permissions Topology:**
   - **Accessibility** (`AXIsProcessTrustedWithOptions`): Mandated to silently intercept and construct global generic keystrokes (`CGEvent` `tapCreate`) without breaking sandbox security.
   - **Microphone** (`kTCCServiceMicrophone`): Mandated to allocate raw hardware `AVAudioEngine` node taps in the background process.
@@ -16,10 +16,10 @@ VoiceTyper revolves around a native, headless background agent architecture tigh
 
 ## 2. Global Input Supervisor (`KeyboardListener.swift`)
 - **Event Tap:** Installs a `.cgSessionEventTap` at `.headInsertEventTap` location. Filters purely for `.flagsChanged` and `.keyDown`.
-- **Primary Trigger (Dictation):** Tracks physical hardware keycode `0x3C` (`Right Shift`). Filters logic by inspecting the `.maskShift` bit flag. 
+- **Primary Trigger (Dictation):** Tracks physical hardware keycode `0x3C` (`Right Shift`). Filters logic by inspecting the `.maskShift` bit flag and device-specific mask (`0x04`). 
 - **Time/State Machine Logic:**
   - **Grace Timer:** An autonomous `DispatchSourceTimer` scheduled dynamically on the main queue to grant a `0.8s` grace period after key release, stitching multi-breath recordings.
-  - **Double-Tap Abort:** Determines precise `processInfo.systemUptime` deltas. If `holdDuration < 0.25s`, the sequence abruptly triggers a panic tear-down and discards the memory buffer.
+  - **Double-Tap Abort:** Determines precise `processInfo.systemUptime` deltas. If `timeSinceLastRelease < 0.3s` and `timeSinceLastPress < 0.6s`, the sequence abruptly triggers a panic tear-down and discards the memory buffer.
 - **Escape Route (`Ctrl + C`):** Sniffs precisely for `.keyDown` keycode `0x08` (C) coupled with the `.maskControl` flag. Bypasses grace timers and instantly destroys active AI rendering tasks via `@MainActor`.
 
 ---
@@ -33,7 +33,7 @@ VoiceTyper revolves around a native, headless background agent architecture tigh
 
 ## 4. ML Inference Engine (`WhisperTranscriber.swift` & `SwiftWhisper`)
 - **Wrapper Paradigm:** Complies with a generic `Transcriber` Swift protocol abstraction, funneling down to `whisper.cpp` neural bindings wrapped by Swift Package `SwiftWhisper` mapping over C++.
-- **Hardware Weight Bindings:** Inspects macOS `UserDefaults`, local `.xcconfig`, or environment variables to load `.bin` tensors. Defaults strictly to pushing the memory-mapped `ggml-base.en.bin` (~142MB) allocation into memory.
+- **Hardware Weight Bindings & Model Management:** Inspects macOS `UserDefaults`, local `.xcconfig`, environment variables, or menu bar selections to load `.bin` tensors from `~/.voicetyper/`. Supports asynchronous background downloading via `URLSessionDownloadDelegate`. Defaults strictly to loading `ggml-base.en.bin` (~142MB).
 - **Hallucination Pruning:** Inherently drops and cleans known Whisper AI artifact patterns mathematically proven as void loops (e.g., `"[BLANK_AUDIO]"`, `"Thank you."`, `"(silence)"`). 
 
 ---
@@ -52,15 +52,23 @@ Deploys a dual-phased OS injection layer to offset heavy tensor-calculation lag 
 ---
 
 ## 6. Floating Visual UX (`FloatingRecordingIndicator.swift`)
-- **Window Level:** Generates an invisible `NSWindow` marked as `.borderless`, `.floating`, and `ignoresMouseEvents` to sit structurally separated above every native macOS application canvas.
+- **Window Level:** Generates an invisible `NSWindow` marked as `.borderless`, `.floating`, sitting structurally separated above every native macOS application canvas.
 - **Geometry Coordinates:** Calculates exact bottom-center `NSPoint(x, y)` relative dynamically to `screen.visibleFrame.midX` and `.minY + 40.0` preventing dock occlusions.
-- **Render Compositor:**
+- **Render Compositor & Abort Interaction:**
   - Instantiates pure `CALayer` and CoreGraphic contexts overlapping native SF Symbols (`mic.fill`). 
   - Subscribes `CABasicAnimation` key paths mutating contextual opaque background elements sequentially with `CAMediaTimingFunction` set globally as `.easeInEaseOut` for an infinite pulsating loop effect.
+  - Exposes an interactive `onAbort` callback linked to `KeyboardListener.forceAbort()` to discard active recordings when clicked.
 
 ---
 
-## 7. App Concurrency & Confinement
+## 7. History & Settings UI (`TranscriptionHistoryWindowController.swift`)
+- **Window Management:** Controls an `NSWindow` hosting a native SwiftUI/AppKit interface accessible via the system status bar menu ("Show VoiceTyper").
+- **State Store:** Maintains an in-memory collection of recent transcription history records, allowing single-click copy operations, quick re-transcription triggers, and model switching menus.
+
+---
+
+## 8. App Concurrency & Confinement
 - **Actor Boundaries:** `KeyboardListenerDelegate` invocations bind `Recording`, `Stopping`, and `Injection` actions strictly to the `@MainActor`. 
 - **Wait Queues:** Heavy AI `.transcribe()` tasks run decoupled in `.background` Task pipelines. Prevents threading-locking and explicitly manages single-channel pipeline bottlenecks (`self.transcriptionTask?.result`) to stop SwiftWhisper instance crashes.
 - **StdErr Piping:** Uses POSIX `dup2` to bind `/dev/null` towards FileDescriptor `2` natively hiding noisy underlying C++ ML `stderr` outputs internally unless initialized explicitly via terminal via the `--debug` parameter struct path.
+

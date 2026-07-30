@@ -11,10 +11,12 @@ A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for 
 ## Features
 
 - **Hold-to-Talk**: Hold `Right Shift` to speak, release to transcribe and type.
-- **Grace Period**: Briefly pause mid-sentence (up to 400ms) without chopping your audio into separate chunks.
-- **Double-Tap Abort**: Rapidly double-tap `Right Shift` within 400ms to silently discard the recording.
+- **Grace Period**: Briefly pause mid-sentence (up to 800ms) without chopping your audio into separate chunks.
+- **Double-Tap Abort**: Rapidly double-tap `Right Shift` within 300ms (or click the floating indicator) to silently discard the recording.
 - **Silence Rejection**: Automatically detects dead audio and drops the transaction — no accidental typing.
 - **Clipboard Preservation**: Borrows your clipboard for ~500ms to paste text, then restores your original clipboard contents.
+- **Transcription History Window**: Native macOS GUI window to view past transcriptions, trigger recording, and adjust settings.
+- **In-App Model Management**: Easily switch and auto-download Whisper models directly from the menu bar or History Window UI.
 - **Fully Offline**: Uses whisper.cpp locally — no Gemini, no OpenAI, no network calls.
 - **Pulsing Indicator**: An elegant floating microphone icon visually pulses at the bottom of your screen to clearly indicate active recording status.
 - **Animated Typing**: Injects a live `processing...` placeholder directly into your text field while the audio is being transcribed to provide instant visual feedback.
@@ -74,6 +76,8 @@ make clean
 
 ### 1. Download a Whisper Model
 
+Model files can be downloaded automatically via the menu bar dropdown or manually via script:
+
 ```bash
 make download-models
 ```
@@ -90,7 +94,7 @@ If you prefer to preserve disk space, you can choose to download only a single m
 
 ### 2. Configuration (Optional)
 
-By default, VoiceTyper uses `ggml-base.en.bin`. If you've downloaded a different model, you can configure the app to use it.
+By default, VoiceTyper uses `ggml-base.en.bin`. Models can be selected directly inside the app menu/GUI or configured via environment variables.
 
 **For normal users:**
 Set the environment variable in your terminal before running the app:
@@ -171,9 +175,10 @@ voicetyper --debug
 | Action | Gesture |
 |--------|---------|
 | Record | Hold `Right Shift` |
-| Pause & resume (grace period) | Release < 400ms, hold again |
-| Abort recording | Double-tap `Right Shift` rapidly |
+| Pause & resume (grace period) | Release < 800ms, hold again |
+| Abort recording | Double-tap `Right Shift` rapidly (< 300ms) or click floating indicator |
 | Force stop processing | Press `Ctrl + C` |
+| Show UI Window | Menu bar icon → "Show VoiceTyper" |
 | Quit | Menu bar icon → "Quit VoiceTyper" |
 
 ## Troubleshooting
@@ -194,6 +199,7 @@ graph TD
     WT["WhisperTranscriber<br/>(SwiftWhisper(whisper.cpp))"]
     TI["TextInjector<br/>(Clipboard/CGEvent)"]
     FRI["FloatingRecordingIndicator<br/>(NSWindow)"]
+    THW["TranscriptionHistoryWindowController<br/>(NSWindow / UI)"]
     
     %% External dependencies
     Mic((Microphone))
@@ -205,13 +211,14 @@ graph TD
     KB -- "Right Shift events" --> KL
     KL -- "Delegate:<br/>On Start/Stop/Abort" --> App
     
-    App -- "show() / hide()" --> FRI
+    App -- "show() / hide() / onAbort" --> FRI
+    App -- "showWindow() / history items" --> THW
     App -- "startRecording()" --> AR
     Mic -- "Raw audio" --> AR
     AR -- "[Float] 16kHz PCM" --> App
     
     App -- "transcribe(frames)" --> WT
-    Model -. "weights" .-> WT
+    Model -. "weights / auto-download" .-> WT
     WT -- "String" --> App
     
     App -- "animated processing... / injectText(String)" --> TI

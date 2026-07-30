@@ -33,7 +33,25 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     private let scrollView = NSScrollView()
     private let cardsStack = NSStackView()
     private let recordButton = CircleRecordButton()
-    private let emptyLabel = NSTextField(labelWithString: "No transcriptions yet")
+    private let emptyStateStack: NSStackView = {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "tray", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 42, weight: .thin))
+        icon.contentTintColor = Palette.secondaryText.withAlphaComponent(0.5)
+        
+        let label = NSTextField(labelWithString: "No transcriptions yet")
+        label.font = .systemFont(ofSize: 15, weight: .medium)
+        label.textColor = Palette.secondaryText
+        
+        stack.addArrangedSubview(icon)
+        stack.addArrangedSubview(label)
+        stack.alphaValue = 0.8
+        return stack
+    }()
     private let bottomBar = ThemeAwareView()
     private lazy var settingsButton = iconButton(symbol: "gearshape", action: #selector(settingsButtonPressed))
 
@@ -91,8 +109,27 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
     func deleteTranscription(id: UUID) {
         items.removeAll { $0.id == id }
+        filteredItems.removeAll { $0.id == id }
         saveHistory()
-        applyFilter()
+        
+        if let view = cardsStack.arrangedSubviews.first(where: { ($0 as? TranscriptionCardView)?.item.id == id }) {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                view.animator().alphaValue = 0.0
+                if let heightConstraint = view.constraints.first(where: { $0.firstAttribute == .height }) {
+                    heightConstraint.animator().constant = 0
+                }
+            }, completionHandler: { [weak self] in
+                self?.cardsStack.removeArrangedSubview(view)
+                view.removeFromSuperview()
+                if self?.filteredItems.isEmpty == true {
+                    self?.emptyStateStack.isHidden = false
+                }
+            })
+        } else {
+            applyFilter()
+        }
     }
 
     func setRecording(_ recording: Bool) {
@@ -161,6 +198,10 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         searchPill.wantsLayer = true
         searchPill.layer?.cornerRadius = 18
         searchPill.layer?.borderWidth = 1
+        searchPill.layer?.shadowColor = NSColor.black.cgColor
+        searchPill.layer?.shadowOpacity = 0.08
+        searchPill.layer?.shadowOffset = NSSize(width: 0, height: -2)
+        searchPill.layer?.shadowRadius = 6
 
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.delegate = self
@@ -205,13 +246,10 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         documentView.addSubview(cardsStack)
         scrollView.documentView = documentView
 
-        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptyLabel.font = .systemFont(ofSize: 15, weight: .regular)
-        emptyLabel.textColor = Palette.secondaryText
-        emptyLabel.alignment = .center
+        emptyStateStack.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(scrollView)
-        contentView.addSubview(emptyLabel)
+        contentView.addSubview(emptyStateStack)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 16),
@@ -228,8 +266,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             cardsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             cardsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
-            emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
-            emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyStateStack.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyStateStack.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
         ])
     }
 
@@ -294,7 +332,6 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         searchField.textColor = Palette.primaryText
         searchPill.layer?.backgroundColor = Palette.searchBackground.cgColor
         searchPill.layer?.borderColor = Palette.border.cgColor
-        emptyLabel.textColor = Palette.secondaryText
         recordButton.refreshColors()
         cardsStack.arrangedSubviews.forEach { view in
             (view as? TranscriptionCardView)?.refreshColors()
@@ -307,7 +344,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             view.removeFromSuperview()
         }
 
-        emptyLabel.isHidden = !filteredItems.isEmpty
+        emptyStateStack.isHidden = !filteredItems.isEmpty
 
         for item in filteredItems {
             let card = TranscriptionCardView(
@@ -349,7 +386,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
 private final class TranscriptionCardView: NSView {
     override var isFlipped: Bool { true }
-    private let item: TranscriptionHistoryItem
+    let item: TranscriptionHistoryItem
     private let onCopy: (String) -> Void
     private let onDelete: (UUID) -> Void
 
@@ -378,6 +415,10 @@ private final class TranscriptionCardView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 12
         layer?.borderWidth = 1.5
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.08
+        layer?.shadowOffset = NSSize(width: 0, height: -2)
+        layer?.shadowRadius = 6
 
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         textLabel.font = .systemFont(ofSize: 13, weight: .regular)
@@ -394,7 +435,7 @@ private final class TranscriptionCardView: NSView {
         dateLabel.font = .systemFont(ofSize: 11, weight: .semibold)
 
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
-        timeLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
 
         copyButton.translatesAutoresizingMaskIntoConstraints = false
         copyButton.target = self
@@ -476,6 +517,12 @@ private final class TranscriptionCardView: NSView {
             copyButton.animator().alphaValue = 1.0
             deleteButton.animator().alphaValue = 1.0
         }
+        let shadowAnim = CABasicAnimation(keyPath: "shadowOpacity")
+        shadowAnim.fromValue = layer?.shadowOpacity
+        shadowAnim.toValue = 0.15
+        shadowAnim.duration = 0.15
+        layer?.add(shadowAnim, forKey: "shadowOpacity")
+        layer?.shadowOpacity = 0.15
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -484,6 +531,12 @@ private final class TranscriptionCardView: NSView {
             copyButton.animator().alphaValue = 0.0
             deleteButton.animator().alphaValue = 0.0
         }
+        let shadowAnim = CABasicAnimation(keyPath: "shadowOpacity")
+        shadowAnim.fromValue = layer?.shadowOpacity
+        shadowAnim.toValue = 0.08
+        shadowAnim.duration = 0.2
+        layer?.add(shadowAnim, forKey: "shadowOpacity")
+        layer?.shadowOpacity = 0.08
     }
 
     @objc private func copyClicked() {
@@ -577,6 +630,10 @@ private final class CircleRecordButton: NSButton {
         pillView.wantsLayer = true
         pillView.layer?.cornerRadius = 20
         pillView.layer?.borderWidth = 1.5
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.08
+        layer?.shadowOffset = NSSize(width: 0, height: -2)
+        layer?.shadowRadius = 6
         pillView.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
         pillView.layer?.shadowColor = NSColor.black.cgColor
         pillView.layer?.shadowOpacity = 0.4
@@ -663,7 +720,6 @@ private class ThemeAwareView: NSView {
         onAppearanceChanged?()
     }
 }
-
 // MARK: - Palette
 
 private enum Palette {
