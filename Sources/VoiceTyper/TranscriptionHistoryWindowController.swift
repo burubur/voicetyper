@@ -134,13 +134,22 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     func appendTranscription(_ text: String, createdAt: Date = Date()) {
+        print("DEBUG: appendTranscription start")
+        fflush(stdout)
         let item = TranscriptionHistoryItem(text: text, createdAt: createdAt)
         items.insert(item, at: 0)
+        print("DEBUG: appendTranscription about to saveHistory")
+        fflush(stdout)
         saveHistory()
+        print("DEBUG: appendTranscription finished saveHistory")
+        fflush(stdout)
         
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty || text.localizedCaseInsensitiveContains(query) {
             filteredItems.insert(item, at: 0)
+            
+            print("DEBUG: appendTranscription about to create card")
+            fflush(stdout)
             
             let card = TranscriptionCardView(
                 item: item,
@@ -159,12 +168,12 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             
             let heightConstraint = card.heightAnchor.constraint(equalToConstant: 0)
             
+            cardsStack.insertArrangedSubview(card, at: 0)
+            
             NSLayoutConstraint.activate([
                 card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
                 heightConstraint
             ])
-            
-            cardsStack.insertArrangedSubview(card, at: 0)
             
             // Set the new constraint
             heightConstraint.isActive = false
@@ -182,6 +191,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             
             emptyStateStack.isHidden = true
         }
+        print("DEBUG: appendTranscription end")
+        fflush(stdout)
     }
 
     func deleteTranscription(id: UUID) {
