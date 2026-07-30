@@ -27,17 +27,28 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     /// - Returns: The transcribed text, or empty string if silence was detected.
     func transcribe(audioFrames: [Float]) async throws -> String {
         let segments = try await whisper.transcribe(audioFrames: audioFrames)
-        let text = segments.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = segments.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Whisper often returns artifacts for silence — reject known patterns
-        let silencePatterns = [
-            "[BLANK_AUDIO]", "(silence)", "[silence]", "(blank audio)",
-            "you", "Thank you.", "Thanks for watching!",
-        ]
-        for pattern in silencePatterns {
-            if text.lowercased() == pattern.lowercased() {
+        // 1. Strip out pure noise/audio tags anywhere they appear
+        let noiseTags = ["[BLANK_AUDIO]", "(silence)", "[silence]", "(blank audio)"]
+        for tag in noiseTags {
+            while let range = text.range(of: tag, options: .caseInsensitive) {
+                text.removeSubrange(range)
+            }
+        }
+        
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 2. Reject the entire transcription if it exactly matches a known whisper hallucination phrase
+        let exactHallucinations = ["you", "Thank you.", "Thanks for watching!"]
+        for hallucination in exactHallucinations {
+            if text.lowercased() == hallucination.lowercased() {
                 return ""
             }
+        }
+
+        if text.isEmpty {
+            return ""
         }
 
         return text

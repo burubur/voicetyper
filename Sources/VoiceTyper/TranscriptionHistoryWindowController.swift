@@ -200,7 +200,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         cardsStack.spacing = 16
         cardsStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
 
-        let documentView = NSView()
+        let documentView = FlippedView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(cardsStack)
         scrollView.documentView = documentView
@@ -215,8 +215,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 16),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
 
             documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
@@ -324,7 +324,11 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             )
             card.translatesAutoresizingMaskIntoConstraints = false
             cardsStack.addArrangedSubview(card)
-            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+            
+            NSLayoutConstraint.activate([
+                card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
+                card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+            ])
         }
     }
 
@@ -344,6 +348,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 // MARK: - TranscriptionCardView
 
 private final class TranscriptionCardView: NSView {
+    override var isFlipped: Bool { true }
     private let item: TranscriptionHistoryItem
     private let onCopy: (String) -> Void
     private let onDelete: (UUID) -> Void
@@ -354,6 +359,8 @@ private final class TranscriptionCardView: NSView {
     private let copyButton: IconButton
     private let deleteButton: IconButton
     private let toastLabel: NSTextField
+
+    private var trackingArea: NSTrackingArea?
 
     init(item: TranscriptionHistoryItem, date: String, time: String, onCopy: @escaping (String) -> Void, onDelete: @escaping (UUID) -> Void) {
         self.item = item
@@ -373,9 +380,10 @@ private final class TranscriptionCardView: NSView {
         layer?.borderWidth = 1.5
 
         textLabel.translatesAutoresizingMaskIntoConstraints = false
-        textLabel.font = .systemFont(ofSize: 15, weight: .regular)
+        textLabel.font = .systemFont(ofSize: 13, weight: .regular)
         textLabel.maximumNumberOfLines = 4
-        textLabel.lineBreakMode = .byTruncatingTail
+        textLabel.lineBreakMode = .byWordWrapping
+        (textLabel.cell as? NSTextFieldCell)?.truncatesLastVisibleLine = true
 
         let divider = NSBox()
         divider.translatesAutoresizingMaskIntoConstraints = false
@@ -383,18 +391,20 @@ private final class TranscriptionCardView: NSView {
         divider.alphaValue = 0.5
 
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
-        dateLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        dateLabel.font = .systemFont(ofSize: 11, weight: .semibold)
 
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
-        timeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        timeLabel.font = .systemFont(ofSize: 11, weight: .semibold)
 
         copyButton.translatesAutoresizingMaskIntoConstraints = false
         copyButton.target = self
         copyButton.action = #selector(copyClicked)
+        copyButton.alphaValue = 0.0
 
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
         deleteButton.target = self
         deleteButton.action = #selector(deleteClicked)
+        deleteButton.alphaValue = 0.0
 
         toastLabel.translatesAutoresizingMaskIntoConstraints = false
         toastLabel.font = .systemFont(ofSize: 11, weight: .bold)
@@ -414,15 +424,15 @@ private final class TranscriptionCardView: NSView {
             textLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             textLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -10),
 
-            copyButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            copyButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -6),
-            copyButton.widthAnchor.constraint(equalToConstant: 28),
-            copyButton.heightAnchor.constraint(equalToConstant: 28),
+            copyButton.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            copyButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
+            copyButton.widthAnchor.constraint(equalToConstant: 22),
+            copyButton.heightAnchor.constraint(equalToConstant: 22),
 
-            deleteButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            deleteButton.topAnchor.constraint(equalTo: topAnchor, constant: 18),
             deleteButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            deleteButton.widthAnchor.constraint(equalToConstant: 28),
-            deleteButton.heightAnchor.constraint(equalToConstant: 28),
+            deleteButton.widthAnchor.constraint(equalToConstant: 22),
+            deleteButton.heightAnchor.constraint(equalToConstant: 22),
 
             toastLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -6),
             toastLabel.centerYAnchor.constraint(equalTo: copyButton.centerYAnchor),
@@ -446,6 +456,34 @@ private final class TranscriptionCardView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        if let trackingArea = trackingArea {
+            addTrackingArea(trackingArea)
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            copyButton.animator().alphaValue = 1.0
+            deleteButton.animator().alphaValue = 1.0
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            copyButton.animator().alphaValue = 0.0
+            deleteButton.animator().alphaValue = 0.0
+        }
     }
 
     @objc private func copyClicked() {
@@ -612,6 +650,10 @@ private final class CircleRecordButton: NSButton {
 }
 
 // MARK: - ThemeAwareView
+
+private class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
 
 private class ThemeAwareView: NSView {
     var onAppearanceChanged: (() -> Void)?
