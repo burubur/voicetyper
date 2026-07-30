@@ -33,6 +33,38 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     private let scrollView = NSScrollView()
     private let cardsStack = NSStackView()
     private let recordButton = CircleRecordButton()
+    private let onboardingOverlay = NSVisualEffectView()
+    private let onboardingProgress = NSProgressIndicator()
+    private let onboardingStatus = NSTextField(labelWithString: "Preparing download...")
+    
+    private let downloadingStatusBar: NSStackView = {
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        stack.wantsLayer = true
+        stack.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        stack.layer?.borderColor = NSColor.separatorColor.cgColor
+        stack.layer?.borderWidth = 1
+        stack.isHidden = true
+        return stack
+    }()
+    private let downloadingStatusLabel: NSTextField = {
+        let lbl = NSTextField(labelWithString: "Downloading...")
+        lbl.font = .systemFont(ofSize: 11, weight: .medium)
+        lbl.textColor = Palette.secondaryText
+        return lbl
+    }()
+    private let downloadingStatusProgress: NSProgressIndicator = {
+        let p = NSProgressIndicator()
+        p.style = .spinning
+        p.controlSize = .small
+        p.translatesAutoresizingMaskIntoConstraints = false
+        p.isIndeterminate = true
+        return p
+    }()
+
     private let emptyStateStack: NSStackView = {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -102,9 +134,54 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     func appendTranscription(_ text: String, createdAt: Date = Date()) {
-        items.insert(TranscriptionHistoryItem(text: text, createdAt: createdAt), at: 0)
+        let item = TranscriptionHistoryItem(text: text, createdAt: createdAt)
+        items.insert(item, at: 0)
         saveHistory()
-        applyFilter()
+        
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty || text.localizedCaseInsensitiveContains(query) {
+            filteredItems.insert(item, at: 0)
+            
+            let card = TranscriptionCardView(
+                item: item,
+                date: dateFormatter.string(from: item.createdAt),
+                time: timeFormatter.string(from: item.createdAt),
+                onCopy: { text in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                },
+                onDelete: { [weak self] id in
+                    self?.deleteTranscription(id: id)
+                }
+            )
+            card.translatesAutoresizingMaskIntoConstraints = false
+            card.alphaValue = 0.0
+            
+            let heightConstraint = card.heightAnchor.constraint(equalToConstant: 0)
+            
+            NSLayoutConstraint.activate([
+                card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
+                heightConstraint
+            ])
+            
+            cardsStack.insertArrangedSubview(card, at: 0)
+            
+            // Set the new constraint
+            heightConstraint.isActive = false
+            let minHeight = card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+            minHeight.isActive = true
+            
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.4
+                context.allowsImplicitAnimation = true
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                
+                card.animator().alphaValue = 1.0
+                self.cardsStack.superview?.layoutSubtreeIfNeeded()
+            })
+            
+            emptyStateStack.isHidden = true
+        }
     }
 
     func deleteTranscription(id: UUID) {
@@ -121,14 +198,28 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
                     heightConstraint.animator().constant = 0
                 }
             }, completionHandler: { [weak self] in
-                self?.cardsStack.removeArrangedSubview(view)
-                view.removeFromSuperview()
-                if self?.filteredItems.isEmpty == true {
-                    self?.emptyStateStack.isHidden = false
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    self.cardsStack.removeArrangedSubview(view)
+                    view.removeFromSuperview()
+                    if self.filteredItems.isEmpty {
+                        self.emptyStateStack.isHidden = false
+                    }
                 }
             })
         } else {
             applyFilter()
+        }
+    }
+
+    func setDownloadingState(modelName: String?) {
+        if let name = modelName {
+            downloadingStatusLabel.stringValue = "Downloading \(name)..."
+            downloadingStatusBar.isHidden = false
+            downloadingStatusProgress.startAnimation(nil)
+        } else {
+            downloadingStatusBar.isHidden = true
+            downloadingStatusProgress.stopAnimation(nil)
         }
     }
 
@@ -190,7 +281,101 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         setupSearchField()
         setupBottomBar()
         setupScrollView()
+        setupOnboardingOverlay()
         refreshColors()
+    }
+    
+    private func setupOnboardingOverlay() {
+        onboardingOverlay.translatesAutoresizingMaskIntoConstraints = false
+        onboardingOverlay.material = .popover
+        onboardingOverlay.blendingMode = .withinWindow
+        onboardingOverlay.state = .active
+        onboardingOverlay.isHidden = true
+        onboardingOverlay.wantsLayer = true
+        onboardingOverlay.layer?.zPosition = 100
+        contentView.addSubview(onboardingOverlay)
+        
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 16
+        onboardingOverlay.addSubview(stack)
+        
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "icloud.and.arrow.down", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 48, weight: .thin))
+        icon.contentTintColor = Palette.accentGreen
+        
+        let title = NSTextField(labelWithString: "Downloading Voice Model")
+        title.font = .systemFont(ofSize: 20, weight: .medium)
+        title.textColor = Palette.primaryText
+        
+        let desc = NSTextField(wrappingLabelWithString: "Downloading the Whisper speech model. This runs 100% locally on your Mac for total privacy. It will only take a moment.")
+        desc.font = .systemFont(ofSize: 13, weight: .regular)
+        desc.textColor = Palette.secondaryText
+        desc.alignment = .center
+        desc.preferredMaxLayoutWidth = 280
+        
+        onboardingProgress.controlSize = .regular
+        onboardingProgress.style = .bar
+        onboardingProgress.isIndeterminate = false
+        onboardingProgress.minValue = 0
+        onboardingProgress.maxValue = 1.0
+        onboardingProgress.translatesAutoresizingMaskIntoConstraints = false
+        
+        onboardingStatus.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        onboardingStatus.textColor = Palette.secondaryText
+        
+        stack.addArrangedSubview(icon)
+        stack.addArrangedSubview(title)
+        stack.addArrangedSubview(desc)
+        stack.setCustomSpacing(24, after: desc)
+        stack.addArrangedSubview(onboardingProgress)
+        stack.addArrangedSubview(onboardingStatus)
+        
+        let cancelBtn = NSButton(title: "Cancel", target: self, action: #selector(cancelDownloadClicked))
+        cancelBtn.bezelStyle = .rounded
+        cancelBtn.font = .systemFont(ofSize: 13, weight: .regular)
+        stack.setCustomSpacing(16, after: onboardingStatus)
+        stack.addArrangedSubview(cancelBtn)
+        
+        NSLayoutConstraint.activate([
+            onboardingOverlay.topAnchor.constraint(equalTo: contentView.topAnchor),
+            onboardingOverlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            onboardingOverlay.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            onboardingOverlay.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            
+            stack.centerXAnchor.constraint(equalTo: onboardingOverlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: onboardingOverlay.centerYAnchor),
+            
+            onboardingProgress.widthAnchor.constraint(equalToConstant: 240)
+        ])
+    }
+    
+    @objc private func cancelDownloadClicked() {
+        ModelDownloader.shared.cancelDownload()
+    }
+    
+    func startOnboardingDownload(completion: @escaping @Sendable (Bool) -> Void) {
+        onboardingOverlay.isHidden = false
+        onboardingOverlay.alphaValue = 1.0
+        
+        ModelDownloader.shared.progressCallback = { [weak self] progress, status in
+            self?.onboardingProgress.doubleValue = progress
+            self?.onboardingStatus.stringValue = status
+        }
+        
+        ModelDownloader.shared.checkAndDownloadModel { [weak self] success in
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.5
+                self?.onboardingOverlay.animator().alphaValue = 0.0
+            }, completionHandler: {
+                Task { @MainActor in
+                    self?.onboardingOverlay.isHidden = true
+                    completion(success)
+                }
+            })
+        }
     }
 
     private func setupSearchField() {
@@ -384,8 +569,9 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
 // MARK: - TranscriptionCardView
 
-private final class TranscriptionCardView: NSView {
-    override var isFlipped: Bool { true }
+@MainActor
+class TranscriptionCardView: NSView {
+    nonisolated override var isFlipped: Bool { true }
     let item: TranscriptionHistoryItem
     private let onCopy: (String) -> Void
     private let onDelete: (UUID) -> Void
@@ -574,7 +760,7 @@ private final class TranscriptionCardView: NSView {
 
 // MARK: - IconButton
 
-private final class IconButton: NSButton {
+class IconButton: NSButton {
     init(symbol: String) {
         super.init(frame: .zero)
         if let symbolImage = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
@@ -604,7 +790,7 @@ private final class IconButton: NSButton {
 
 // MARK: - CircleRecordButton
 
-private final class CircleRecordButton: NSButton {
+class CircleRecordButton: NSButton {
     private var recording = false
     private let coralColor = NSColor(red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
 
@@ -708,11 +894,11 @@ private final class CircleRecordButton: NSButton {
 
 // MARK: - ThemeAwareView
 
-private class FlippedView: NSView {
-    override var isFlipped: Bool { true }
+class FlippedView: NSView {
+    nonisolated override var isFlipped: Bool { true }
 }
 
-private class ThemeAwareView: NSView {
+class ThemeAwareView: NSView {
     var onAppearanceChanged: (() -> Void)?
 
     override func viewDidChangeEffectiveAppearance() {

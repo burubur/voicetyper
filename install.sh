@@ -35,12 +35,7 @@ fi
 echo "🏗️ Building VoiceTyper in release mode (this may take a few minutes)..."
 swift build -c release
 
-# 4. Download default model
-echo "🧠 Downloading default speech model (NVIDIA Parakeet Unified 0.6B)..."
-chmod +x download-models.sh
-./download-models.sh parakeet-unified-0.6b
-
-# 5. Install system-wide
+# 4. Install system-wide
 INSTALL_DIR="/usr/local/bin"
 echo "📦 Installing binary to $INSTALL_DIR/voicetyper..."
 
@@ -57,7 +52,7 @@ echo "✅ VoiceTyper installed successfully!"
 echo "🚀 Starting VoiceTyper in the background..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
-nohup "$INSTALL_DIR/voicetyper" > /dev/null 2>&1 &
+nohup "$INSTALL_DIR/voicetyper" > ~/.voicetyper/app.log 2>> /dev/null 2>&11 &
 
 echo "It is now running in your menu bar (simple mic icon)."
 echo "To see diagnostic logs, you can stop it and run it manually in a custom terminal: voicetyper --debug"

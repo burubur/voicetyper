@@ -29,14 +29,13 @@ final class App: NSObject, NSApplicationDelegate {
         requestPermissions()
         setupMenuBar()
         setupHistoryWindow()
-        loadModel()
+        
         keyboardListener.delegate = self
-
         FloatingRecordingIndicator.shared.onAbort = { [weak self] in
             self?.keyboardListener.forceAbort()
         }
-
-        keyboardListener.start()
+        
+        loadModel()
     }
 
     // MARK: - Setup
@@ -192,15 +191,33 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     private func loadModel() {
-        guard let modelURL = WhisperTranscriber.resolveModelURL() else {
-            print("❌ Cannot start without a whisper model. Exiting.")
-            NSApplication.shared.terminate(self)
-            return
+        if let modelURL = WhisperTranscriber.resolveModelURL() {
+            finishLoadingModel(url: modelURL)
+        } else {
+            historyWindowController.showWindow(nil)
+            historyWindowController.startOnboardingDownload { [weak self] success in
+                Task { @MainActor in
+                    if success, let url = WhisperTranscriber.resolveModelURL() {
+                        self?.finishLoadingModel(url: url)
+                    } else {
+                        self?.keyboardListener.start()
+                        print("⚠️ No model loaded. App is running but dictation is disabled.")
+                    }
+                }
+            }
         }
-
+    }
+    
+    private func finishLoadingModel(url: URL) {
         do {
-            transcriber = try WhisperTranscriber(modelURL: modelURL)
-            print("✅ Whisper model loaded from: \(modelURL.path)")
+            if !url.path.contains("parakeet") {
+                transcriber = try WhisperTranscriber(modelURL: url)
+                print("✅ Whisper model loaded from: \(url.path)")
+            } else {
+                transcriber = nil
+                print("⚠️ Parakeet model selected, but the inference engine is currently unlinked.")
+            }
+            keyboardListener.start()
         } catch {
             print("❌ Failed to load whisper model: \(error)")
             NSApplication.shared.terminate(self)
@@ -239,6 +256,8 @@ final class App: NSObject, NSApplicationDelegate {
         do {
             if !filename.contains("parakeet") {
                 transcriber = try WhisperTranscriber(modelURL: modelURL)
+            } else {
+                transcriber = nil
             }
             UserDefaults.standard.set(filename, forKey: "WHISPER_MODEL")
             rebuildMenuBar()
@@ -253,6 +272,7 @@ final class App: NSObject, NSApplicationDelegate {
 
         downloadingModels.insert(filename)
         rebuildMenuBar()
+        historyWindowController.setDownloadingState(modelName: filename)
 
         print("📥 Starting background download for model \(filename)...")
 
@@ -287,6 +307,12 @@ final class App: NSObject, NSApplicationDelegate {
                 guard let self = self else { return }
                 self.downloadingModels.remove(filename)
                 self.rebuildMenuBar()
+                
+                if self.downloadingModels.isEmpty {
+                    self.historyWindowController.setDownloadingState(modelName: nil as String?)
+                } else {
+                    self.historyWindowController.setDownloadingState(modelName: self.downloadingModels.first)
+                }
 
                 if success {
                     print("✅ Download completed for \(filename)")
@@ -329,8 +355,25 @@ final class App: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Calculate peak amplitude to detect absolute silence (e.g. mic permission denied)
+        var maxAmplitude: Float = 0
+        for sample in audioFrames {
+            let absSample = abs(sample)
+            if absSample > maxAmplitude {
+                maxAmplitude = absSample
+            }
+        }
+        
+        // If amplitude is basically zero, skip transcription to prevent Whisper hallucinations
+        guard maxAmplitude > 0.005 else {
+            print("🔕 Audio is silent (max amp: \(maxAmplitude)). Skipping to prevent hallucination.")
+            updateIcon(symbol: "mic")
+            return
+        }
+
         updateIcon(symbol: "waveform.circle")
         print("🧠 Transcribing \(audioFrames.count) frames locally...")
+        fflush(stdout)
 
         // Run transcription; task inherits MainActor but await will yield
         let abortFlag = abortRequested
@@ -349,12 +392,20 @@ final class App: NSObject, NSApplicationDelegate {
                 return
             }
 
-            self.textInjector.startProcessingAnimation()
+            await self.textInjector.startProcessingAnimation()
 
             do {
+                print("DEBUG: Before transcribe in App")
+                fflush(stdout)
                 let text = try await transcriber.transcribe(audioFrames: audioFrames)
+                print("DEBUG: After transcribe in App. Text length: \(text.count)")
+                fflush(stdout)
 
-                self.textInjector.stopProcessingAnimation()
+                print("DEBUG: Before stopProcessingAnimation")
+                fflush(stdout)
+                await self.textInjector.stopProcessingAnimation()
+                print("DEBUG: After stopProcessingAnimation")
+                fflush(stdout)
 
                 // Check abort after transcription completes
                 guard !self.abortRequested else {
@@ -369,14 +420,19 @@ final class App: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                print("✅ Transcribed: \(text)")
+                print("DEBUG: Before appendTranscription")
+                fflush(stdout)
                 self.historyWindowController.appendTranscription(text)
+                print("DEBUG: After appendTranscription, before injectText")
+                fflush(stdout)
                 // Append trailing space so consecutive dictations don't merge
                 self.textInjector.injectText(text + " ")
+                print("DEBUG: After injectText")
+                fflush(stdout)
                 self.updateIcon(symbol: "mic")
 
             } catch {
-                self.textInjector.stopProcessingAnimation()
+                await self.textInjector.stopProcessingAnimation()
                 print("❌ Transcription error: \(error)")
                 self.updateIcon(symbol: "mic")
             }
@@ -398,6 +454,17 @@ final class App: NSObject, NSApplicationDelegate {
 
 extension App: KeyboardListenerDelegate {
     func keyboardListenerDidStartRecording() {
+        guard transcriber != nil else {
+            keyboardListener.forceAbort()
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = "Speech Model Required"
+            alert.informativeText = "You need to download a speech model before you can start dictating. Please click the Settings gear icon in the history window to download a model."
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
+        
         abortRequested = false
         updateIcon(symbol: "mic.fill")
         historyWindowController.setRecording(true)
@@ -422,10 +489,13 @@ extension App: KeyboardListenerDelegate {
     func keyboardListenerDidAbort() {
         abortRequested = true
         _ = audioRecorder.stopRecording()  // Discard audio
-        textInjector.stopProcessingAnimation()  // Instantly clear any ongoing injection animation
-        historyWindowController.setRecording(false)
-        FloatingRecordingIndicator.shared.hide()
-        updateIcon(symbol: "mic")
-        print("🚫 Aborted. Dictation discarded.")
+        
+        Task { @MainActor in
+            await textInjector.stopProcessingAnimation()  // Instantly clear any ongoing injection animation
+            historyWindowController.setRecording(false)
+            FloatingRecordingIndicator.shared.hide()
+            updateIcon(symbol: "mic")
+            print("🚫 Aborted. Dictation discarded.")
+        }
     }
 }

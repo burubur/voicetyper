@@ -84,6 +84,8 @@ final class TextInjector: @unchecked Sendable {
 
     /// Deletes the placeholder string by sending multiple backspace (Delete) keystrokes.
     func deletePlaceholder(length: Int) {
+        print("DEBUG: deletePlaceholder start length=\(length)")
+        fflush(stdout)
         let source = CGEventSource(stateID: .hidSystemState)
         let backspaceVirtualKey: CGKeyCode = 0x33  // kVK_Delete
 
@@ -104,8 +106,8 @@ final class TextInjector: @unchecked Sendable {
     private var animationTask: Task<Void, Never>?
 
     /// Starts an animated "[processing...]" placeholder loop
-    func startProcessingAnimation() {
-        stopProcessingAnimation()
+    func startProcessingAnimation() async {
+        await stopProcessingAnimation()
 
         animationTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -138,13 +140,24 @@ final class TextInjector: @unchecked Sendable {
             }
 
             // Clean up the entire string that was printed thus far
+            print("DEBUG: animationTask cleaning up length \(currentLength)")
+            fflush(stdout)
             self.deletePlaceholder(length: currentLength)
+            print("DEBUG: animationTask finished cleanup")
+            fflush(stdout)
         }
     }
 
-    /// Stops the placeholder animation and immediately cleans up the text
-    func stopProcessingAnimation() {
+    /// Stops the placeholder animation and waits for cleanup to finish
+    func stopProcessingAnimation() async {
+        print("DEBUG: Inside stopProcessingAnimation, about to cancel")
+        fflush(stdout)
         animationTask?.cancel()
+        print("DEBUG: Inside stopProcessingAnimation, about to await result")
+        fflush(stdout)
+        _ = await animationTask?.result
+        print("DEBUG: Inside stopProcessingAnimation, finished awaiting result")
+        fflush(stdout)
         animationTask = nil
     }
 }

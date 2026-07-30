@@ -26,7 +26,11 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     /// - Parameter audioFrames: Array of Float samples at 16kHz sample rate.
     /// - Returns: The transcribed text, or empty string if silence was detected.
     func transcribe(audioFrames: [Float]) async throws -> String {
+        print("DEBUG: Calling whisper.transcribe with \(audioFrames.count) frames")
+        fflush(stdout)
         let segments = try await whisper.transcribe(audioFrames: audioFrames)
+        print("DEBUG: whisper.transcribe returned \(segments.count) segments")
+        fflush(stdout)
         var text = segments.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
 
         // 1. Strip out pure noise/audio tags anywhere they appear
@@ -118,8 +122,8 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
             }
         }
 
-        // Default: NVIDIA Parakeet Unified 0.6B (ONNX)
-        return "parakeet-unified-0.6b"
+        // Default: Whisper Base English (GGML)
+        return "ggml-base.en.bin"
     }
 
     /// Resolved model file URL based on configuration

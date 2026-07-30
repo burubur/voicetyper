@@ -1,12 +1,17 @@
-.PHONY: build run download-models debug install uninstall clean
+.PHONY: build run stop download-models debug install uninstall clean
 
 # Builds the VoiceTyper executable target
 build:
 	swift build
 
-# Runs the VoiceTyper executable
+# Runs the VoiceTyper executable in the background
 run:
-	swift run VoiceTyper
+	nohup voicetyper > /dev/null 2>&1 &
+
+# Stops the background VoiceTyper application
+stop:
+	pkill -i -x "VoiceTyper" || true
+	pkill -i -x "voicetyper" || true
 
 # Downloads all defined voice transcriber models sequentially via the bash script
 download-models:
