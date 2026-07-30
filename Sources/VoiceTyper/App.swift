@@ -373,7 +373,6 @@ final class App: NSObject, NSApplicationDelegate {
 
         updateIcon(symbol: "waveform.circle")
         print("🧠 Transcribing \(audioFrames.count) frames locally...")
-        fflush(stdout)
 
         // Run transcription; task inherits MainActor but await will yield
         let abortFlag = abortRequested
@@ -395,17 +394,9 @@ final class App: NSObject, NSApplicationDelegate {
             await self.textInjector.startProcessingAnimation()
 
             do {
-                print("DEBUG: Before transcribe in App")
-                fflush(stdout)
                 let text = try await transcriber.transcribe(audioFrames: audioFrames)
-                print("DEBUG: After transcribe in App. Text length: \(text.count)")
-                fflush(stdout)
 
-                print("DEBUG: Before stopProcessingAnimation")
-                fflush(stdout)
                 await self.textInjector.stopProcessingAnimation()
-                print("DEBUG: After stopProcessingAnimation")
-                fflush(stdout)
 
                 // Check abort after transcription completes
                 guard !self.abortRequested else {
@@ -420,15 +411,10 @@ final class App: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                print("DEBUG: Before appendTranscription")
-                fflush(stdout)
+                print("✅ Transcribed: \(text)")
                 self.historyWindowController.appendTranscription(text)
-                print("DEBUG: After appendTranscription, before injectText")
-                fflush(stdout)
                 // Append trailing space so consecutive dictations don't merge
                 self.textInjector.injectText(text + " ")
-                print("DEBUG: After injectText")
-                fflush(stdout)
                 self.updateIcon(symbol: "mic")
 
             } catch {
