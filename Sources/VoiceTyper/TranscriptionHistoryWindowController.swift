@@ -151,8 +151,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         window.contentView = contentView
 
         setupSearchField()
-        setupScrollView()
         setupBottomBar()
+        setupScrollView()
         refreshColors()
     }
 
@@ -214,18 +214,19 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         contentView.addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 22),
+            scrollView.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -178),
+            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
 
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
-            documentView.topAnchor.constraint(equalTo: cardsStack.topAnchor),
-            documentView.bottomAnchor.constraint(equalTo: cardsStack.bottomAnchor),
-            documentView.leadingAnchor.constraint(equalTo: cardsStack.leadingAnchor),
-            documentView.trailingAnchor.constraint(equalTo: cardsStack.trailingAnchor),
 
-            cardsStack.widthAnchor.constraint(equalTo: documentView.widthAnchor),
+            cardsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            cardsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            cardsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            cardsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
