@@ -176,8 +176,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
         NSLayoutConstraint.activate([
             searchPill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 60),
-            searchPill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            searchPill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            searchPill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            searchPill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             searchPill.heightAnchor.constraint(equalToConstant: 36),
 
             searchField.leadingAnchor.constraint(equalTo: searchPill.leadingAnchor, constant: 16),
@@ -252,10 +252,10 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             bottomBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 110),
+            bottomBar.heightAnchor.constraint(equalToConstant: 76),
 
             recordButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
-            recordButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 24),
+            recordButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
             recordButton.heightAnchor.constraint(equalToConstant: 42),
 
             clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -16),
