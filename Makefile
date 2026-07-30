@@ -17,9 +17,10 @@ stop:
 download-models:
 	./download-models.sh
 
-# Recompiles and automatically re-runs VoiceTyper on any .swift file changes
+# Runs VoiceTyper interactively for debugging
 debug:
-	watchexec -e swift -r "swift build && .build/debug/VoiceTyper"
+	make stop
+	swift run VoiceTyper
 
 # Installs VoiceTyper locally
 install:
