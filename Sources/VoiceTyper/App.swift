@@ -191,13 +191,13 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     private func loadModel() {
-        if let modelURL = WhisperTranscriber.resolveModelURL() {
+        if let modelURL = WhisperTranscriber.resolveModelURL().1 {
             finishLoadingModel(url: modelURL)
         } else {
             historyWindowController.showWindow(nil)
             historyWindowController.startOnboardingDownload { [weak self] success in
                 Task { @MainActor in
-                    if success, let url = WhisperTranscriber.resolveModelURL() {
+                    if success, let url = WhisperTranscriber.resolveModelURL().1 {
                         self?.finishLoadingModel(url: url)
                     } else {
                         self?.keyboardListener.start()
@@ -214,8 +214,8 @@ final class App: NSObject, NSApplicationDelegate {
                 transcriber = try WhisperTranscriber(modelURL: url)
                 print("✅ Whisper model loaded from: \(url.path)")
             } else {
-                transcriber = nil
-                print("⚠️ Parakeet model selected, but the inference engine is currently unlinked.")
+                transcriber = try ParakeetTranscriber(modelDir: url)
+                print("✅ Parakeet model loaded from: \(url.path)")
             }
             keyboardListener.start()
         } catch {
@@ -257,7 +257,12 @@ final class App: NSObject, NSApplicationDelegate {
             if !filename.contains("parakeet") {
                 transcriber = try WhisperTranscriber(modelURL: modelURL)
             } else {
-                transcriber = nil
+                let parakeetDir = WhisperTranscriber.defaultModelDirectory.appendingPathComponent(
+                    filename == "parakeet-unified-0.6b"
+                        ? "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
+                        : "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+                )
+                transcriber = try ParakeetTranscriber(modelDir: parakeetDir)
             }
             UserDefaults.standard.set(filename, forKey: "WHISPER_MODEL")
             rebuildMenuBar()

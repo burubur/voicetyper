@@ -124,27 +124,38 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
 
     /// Resolved model file URL based on configuration
     static var defaultModelURL: URL {
-        defaultModelDirectory.appendingPathComponent(configuredModelFilename)
+        let filename = configuredModelFilename
+        if filename.contains("parakeet") {
+            let dirname = filename == "parakeet-unified-0.6b"
+                ? "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
+                : "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+            return defaultModelDirectory.appendingPathComponent(dirname)
+        }
+        return defaultModelDirectory.appendingPathComponent(filename)
     }
 
     /// Checks if the configured model file exists and prints instructions if missing.
     /// Falls back to any downloaded model if configured model is missing.
     /// - Returns: The model URL if it exists or a downloaded fallback exists, nil otherwise.
-    static func resolveModelURL() -> URL? {
+    static func resolveModelURL() -> (Bool, URL?) {
         let url = defaultModelURL
         if FileManager.default.fileExists(atPath: url.path) {
-            return url
+            return (true, url)
         }
 
         // Fallback: check if any available model is downloaded
         for option in availableModels {
             if isModelDownloaded(filename: option.filename) {
-                let modelFilename = option.filename.contains("parakeet") ? option.filename : (option.filename.hasSuffix(".bin") ? option.filename : "\(option.filename).bin")
-                let fallbackURL = defaultModelDirectory.appendingPathComponent(modelFilename)
+                let dirname = option.filename.contains("parakeet")
+                    ? (option.filename == "parakeet-unified-0.6b"
+                        ? "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
+                        : "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8")
+                    : (option.filename.hasSuffix(".bin") ? option.filename : "\(option.filename).bin")
+                let fallbackURL = defaultModelDirectory.appendingPathComponent(dirname)
                 if FileManager.default.fileExists(atPath: fallbackURL.path) {
                     print("⚠️  Configured model '\(configuredModelFilename)' not found. Falling back to downloaded model '\(option.filename)'.")
                     UserDefaults.standard.set(option.filename, forKey: "WHISPER_MODEL")
-                    return fallbackURL
+                    return (true, fallbackURL)
                 }
             }
         }
@@ -156,14 +167,13 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
             If you configured a custom model via WHISPER_MODEL, make sure it's downloaded.
             To download the default model:
               mkdir -p ~/.voicetyper
-              curl -L -o ~/.voicetyper/ggml-base.en.bin \\
-                https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
-
+              curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(configuredModelFilename)" -o "\(url.path)"
+            
             Available models (trade-off: size vs accuracy vs speed):
               • ggml-tiny.en.bin        (~75MB)  — fastest, least accurate
               • ggml-base.en.bin        (~142MB) — good balance ✓ (recommended)
               • ggml-small.en.bin       (~466MB) — more accurate
             """)
-        return nil
+        return (false, nil)
     }
 }
