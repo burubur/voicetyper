@@ -796,7 +796,7 @@ class CircleRecordButton: NSButton {
 
     private let pillView = NSView()
     private let micImageView = NSImageView()
-    private let statusLabel = NSTextField(labelWithString: "Right Shift and hold to record")
+    private let statusLabel = NSTextField(labelWithString: "Right Option and hold to record")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -862,7 +862,7 @@ class CircleRecordButton: NSButton {
 
     func setRecording(_ value: Bool) {
         recording = value
-        statusLabel.stringValue = recording ? "Recording..." : "Right Shift and hold to record"
+        statusLabel.stringValue = recording ? "Recording..." : "Right Option and hold to record"
         refreshColors()
     }
 

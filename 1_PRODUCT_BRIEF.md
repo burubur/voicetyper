@@ -8,7 +8,7 @@ Developers, writers, and power users who require fast, private, and highly acces
 
 ## Core Capabilities
 1. **Universal Dictation (Hold-To-Talk):**
-   - The system triggers explicitly via a persistent global hotkey (`Right Shift`).
+   - The system triggers explicitly via a persistent global hotkey (`Right Option`).
    - Transcription only occurs while the key is depressed, eliminating accidental listening.
 2. **Instant Delivery:**
    - The transcribed text is automatically injected into whichever application/text-field the user currently has focused.

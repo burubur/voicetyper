@@ -16,7 +16,7 @@ VoiceTyper revolves around a native, headless background agent architecture tigh
 
 ## 2. Global Input Supervisor (`KeyboardListener.swift`)
 - **Event Tap:** Installs a `.cgSessionEventTap` at `.headInsertEventTap` location. Filters purely for `.flagsChanged` and `.keyDown`.
-- **Primary Trigger (Dictation):** Tracks physical hardware keycode `0x3C` (`Right Shift`). Filters logic by inspecting the `.maskShift` bit flag and device-specific mask (`0x04`). 
+- **Primary Trigger (Dictation):** Tracks physical hardware keycode `0x3D` (`Right Option`). Filters logic by inspecting the `.maskAlternate` bit flag and device-specific mask (`0x40`). 
 - **Time/State Machine Logic:**
   - **Grace Timer:** An autonomous `DispatchSourceTimer` scheduled dynamically on the main queue to grant a `0.8s` grace period after key release, stitching multi-breath recordings.
   - **Double-Tap Abort:** Determines precise `processInfo.systemUptime` deltas. If `timeSinceLastRelease < 0.3s` and `timeSinceLastPress < 0.6s`, the sequence abruptly triggers a panic tear-down and discards the memory buffer.

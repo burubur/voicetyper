@@ -11,7 +11,7 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 ## 1. Core User Workflows
 
 ### 1.1 Triggering Dictation (Hold-to-Talk)
-- Users interact solely through a global hardware hotkey (`Right Shift`).
+- Users interact solely through a global hardware hotkey (`Right Option`).
 - Dictation begins immediately upon depressing the key. 
 - A translucent oscillating microphone overlay appears at the bottom center of the active screen, accompanied by a `🔴` icon in the system menu bar to indicate active listening.
 
@@ -36,7 +36,7 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 ## 3. Mitigation & Abort Workflows
 
 ### 3.1 Hard Abort Audio (Double-Tap)
-- **Trigger:** Rapidly double-tapping the `Right Shift` hotkey during dictation.
+- **Trigger:** Rapidly double-tapping the `Right Option` hotkey during dictation.
 - **Action:** Trashes the auditory buffer and cancels the sequence immediately before transcription inference is allowed to begin.
 
 ### 3.2 Terminate Processing (Force Escape)

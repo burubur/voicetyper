@@ -14,7 +14,7 @@ VoiceTyper is a lightweight, headless macOS agent operating in the background. I
 ### 1. Global Input Monitoring (`KeyboardListener`)
 - **Mechanism:** Leverages Quartz Event Services (`CGEvent.tapCreate`).
 - **Constraint:** Must bypass strict sandbox contexts by requiring system-level Accessibility permissions.
-- **State Machine:** Governs precise timing logic for detecting `Hold`, `Release`, `Grace Period`, and `Double-tap Aborts` explicitly on the `Right Shift` (keycode `60`) physical key.
+- **State Machine:** Governs precise timing logic for detecting `Hold`, `Release`, `Grace Period`, and `Double-tap Aborts` explicitly on the `Right Option` (keycode `61`) physical key.
 
 ### 2. Audio Subsystem (`AudioRecorder`)
 - **Mechanism:** Driven by `AVFoundation` (`AVAudioEngine`).

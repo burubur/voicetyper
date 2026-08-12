@@ -5,14 +5,14 @@ A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for 
 ## How to Use
 
 1. **Install** the app.
-2. **Press and hold** the `Right Shift` button.
+2. **Press and hold** the `Right Option` button.
 3. **Talk!** (Release to automatically type your text).
 
 ## Features
 
-- **Hold-to-Talk**: Hold `Right Shift` to speak, release to transcribe and type.
+- **Hold-to-Talk**: Hold `Right Option` to speak, release to transcribe and type.
 - **Grace Period**: Briefly pause mid-sentence (up to 800ms) without chopping your audio into separate chunks.
-- **Double-Tap Abort**: Rapidly double-tap `Right Shift` within 300ms (or click the floating indicator) to silently discard the recording.
+- **Double-Tap Abort**: Rapidly double-tap `Right Option` within 300ms (or click the floating indicator) to silently discard the recording.
 - **Silence Rejection**: Automatically detects dead audio and drops the transaction — no accidental typing.
 - **Clipboard Preservation**: Borrows your clipboard for ~500ms to paste text, then restores your original clipboard contents.
 - **Transcription History Window**: Native macOS GUI window to view past transcriptions, trigger recording, and adjust settings.
@@ -165,18 +165,18 @@ voicetyper --debug
 
 ### How to type:
 1. Click into any text field (editor, browser, chat app, etc.).
-2. **Hold `Right Shift`** — a pulsing floating microphone appears at the bottom of your screen, recording begins, and the terminal logs a 🔴 recording state.
+2. **Hold `Right Option`** — a pulsing floating microphone appears at the bottom of your screen, recording begins, and the terminal logs a 🔴 recording state.
 3. **Speak normally** into your microphone.
-4. **Release `Right Shift`** — the app types an animated `processing...` placeholder in your text field, whisper.cpp transcribes locally, and the terminal logs a ⏳ processing state.
+4. **Release `Right Option`** — the app types an animated `processing...` placeholder in your text field, whisper.cpp transcribes locally, and the terminal logs a ⏳ processing state.
 5. Once finished, the placeholder is deleted and your transcribed text is instantly injected.
 
 ### Shortcuts
 
 | Action | Gesture |
 |--------|---------|
-| Record | Hold `Right Shift` |
+| Record | Hold `Right Option` |
 | Pause & resume (grace period) | Release < 800ms, hold again |
-| Abort recording | Double-tap `Right Shift` rapidly (< 300ms) or click floating indicator |
+| Abort recording | Double-tap `Right Option` rapidly (< 300ms) or click floating indicator |
 | Force stop processing | Press `Ctrl + C` |
 | Show UI Window | Menu bar icon → "Show VoiceTyper" |
 | Quit | Menu bar icon → "Quit VoiceTyper" |
@@ -208,7 +208,7 @@ graph TD
     FocusedApp((Focused App))
 
     %% Data flow
-    KB -- "Right Shift events" --> KL
+    KB -- "Right Option events" --> KL
     KL -- "Delegate:<br/>On Start/Stop/Abort" --> App
     
     App -- "show() / hide() / onAbort" --> FRI

@@ -130,7 +130,7 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.onMicPressed = { [weak self] in
             guard let self else { return }
             self.showHistoryWindow()
-            print("🎙️ Right Shift and hold to record.")
+            print("🎙️ Right Option and hold to record.")
         }
 
         historyWindowController.onSettingsPressed = { [weak self] view in

@@ -16,7 +16,7 @@ protocol KeyboardListenerDelegate: AnyObject, Sendable {
 /// Monitors global keyboard events via CGEvent tap.
 ///
 /// Implements a hold-to-talk state machine with:
-/// - **Hold-to-Record**: Hold Right Shift to record, release to process.
+/// - **Hold-to-Record**: Hold Right Option to record, release to process.
 /// - **Grace Period**: 400ms window after release to resume recording
 ///   (allows brief pauses mid-sentence without chopping audio).
 /// - **Double-Tap Abort**: Two rapid presses within 400ms aborts the
@@ -33,13 +33,13 @@ final class KeyboardListener: @unchecked Sendable {
     private var graceTimer: DispatchSourceTimer?
     private var eventTap: CFMachPort?
 
-    /// The modifier flag for Right Shift key.
-    /// CGEvent reports Right Shift as `.maskShift` combined with keyCode check.
-    /// We use flagsChanged event and check the raw keyCode for right shift (0x3C).
-    private let rightShiftKeyCode: UInt16 = 0x3C
+    /// The modifier flag for Right Option key.
+    /// CGEvent reports Right Option as `.maskAlternate` combined with keyCode check.
+    /// We use flagsChanged event and check the raw keyCode for right option (0x3D).
+    private let rightOptionKeyCode: UInt16 = 0x3D
 
-    /// Physical Right Shift device bitmask in CGEvent raw flags (0x04 / NX_DEVICERSHIFTKEYMASK).
-    private let nxDeviceRightShiftMask: UInt64 = 0x00000004
+    /// Physical Right Option device bitmask in CGEvent raw flags (0x40 / NX_DEVICERALTKEYMASK / NX_DEVICEROPTIONKEYMASK).
+    private let nxDeviceRightOptionMask: UInt64 = 0x00000040
 
     /// The key code for the 'C' key.
     private let cKeyCode: UInt16 = 0x08
@@ -95,14 +95,14 @@ final class KeyboardListener: @unchecked Sendable {
         let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        print("⌨️  Key listener active. Right Shift and hold to record.")
+        print("⌨️  Key listener active. Right Option and hold to record.")
     }
 
     @MainActor
     private func showAccessibilityAlert() {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
-        alert.informativeText = "VoiceTyper needs Accessibility permission to detect the Right Shift key for dictation.\n\nPlease grant Accessibility access in System Settings > Privacy & Security > Accessibility."
+        alert.informativeText = "VoiceTyper needs Accessibility permission to detect the Right Option key for dictation.\n\nPlease grant Accessibility access in System Settings > Privacy & Security > Accessibility."
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
@@ -134,15 +134,15 @@ final class KeyboardListener: @unchecked Sendable {
     private func handleFlagsChanged(event: CGEvent) {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
 
-        // Only respond to Right Shift key (keyCode 0x3C = 60)
-        guard keyCode == rightShiftKeyCode else { return }
+        // Only respond to Right Option key (keyCode 0x3D = 61)
+        guard keyCode == rightOptionKeyCode else { return }
 
-        // Check if Right Shift is pressed down.
-        // CGEventFlags.maskShift indicates Shift modifier state.
-        // We also check (event.flags.rawValue & nxDeviceRightShiftMask) != 0 for hardware mask compatibility.
-        let isShiftDown = event.flags.contains(.maskShift) || (event.flags.rawValue & nxDeviceRightShiftMask) != 0
+        // Check if Right Option is pressed down.
+        // CGEventFlags.maskAlternate indicates Option modifier state.
+        // We also check (event.flags.rawValue & nxDeviceRightOptionMask) != 0 for hardware mask compatibility.
+        let isOptionDown = event.flags.contains(.maskAlternate) || (event.flags.rawValue & nxDeviceRightOptionMask) != 0
 
-        if isShiftDown {
+        if isOptionDown {
             if !isKeyPressed {
                 handleKeyDown()
             }
@@ -161,7 +161,7 @@ final class KeyboardListener: @unchecked Sendable {
         lastPressTime = now
         isKeyPressed = true
 
-        // Double-tap abort: if user taps Right Shift twice rapidly (< 300ms since release)
+        // Double-tap abort: if user taps Right Option twice rapidly (< 300ms since release)
         if isRecording, timeSinceLastRelease < 0.3, timeSinceLastPress < 0.6 {
             print("🛑 Double-tap detected! Aborting dictation...")
             cancelGraceTimer()
