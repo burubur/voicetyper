@@ -362,9 +362,11 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.showWindow(nil)
     }
 
+    private let conversationStorage = VoiceConversationStorage()
+
     // MARK: - Transcription Pipeline
 
-    private func processRecording() {
+    private func processRecording(mode: DictationMode = .standard) {
         let audioFrames = audioRecorder.stopRecording()
 
         // Reject too-short recordings (~< 0.3 seconds)
@@ -390,8 +392,8 @@ final class App: NSObject, NSApplicationDelegate {
             return
         }
 
-        updateIcon(symbol: "waveform.circle")
-        print("🧠 Transcribing \(audioFrames.count) frames locally...")
+        updateIcon(symbol: (mode == .memoryVault) ? "brain.fill" : "waveform.circle")
+        print("🧠 Transcribing \(audioFrames.count) frames locally (Mode: \(mode))...")
 
         // Run transcription; task inherits MainActor but await will yield
         let abortFlag = abortRequested
@@ -410,12 +412,16 @@ final class App: NSObject, NSApplicationDelegate {
                 return
             }
 
-            await self.textInjector.startProcessingAnimation()
+            if mode == .standard {
+                await self.textInjector.startProcessingAnimation()
+            }
 
             do {
                 let text = try await transcriber.transcribe(audioFrames: audioFrames)
 
-                await self.textInjector.stopProcessingAnimation()
+                if mode == .standard {
+                    await self.textInjector.stopProcessingAnimation()
+                }
 
                 // Check abort after transcription completes
                 guard !self.abortRequested else {
@@ -430,14 +436,27 @@ final class App: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                print("✅ Transcribed: \(text)")
-                self.historyWindowController.appendTranscription(text)
-                // Append trailing space so consecutive dictations don't merge
-                self.textInjector.injectText(text + " ")
+                if mode == .standard {
+                    print("✅ Transcribed: \(text)")
+                    self.historyWindowController.appendTranscription(text)
+                    // Append trailing space so consecutive dictations don't merge
+                    self.textInjector.injectText(text + " ")
+                } else {
+                    // Memory Vault Mode: Archive raw audio WAV and text to ~/.voicetyper/conversation/
+                    print("🧠 Archiving voice conversation note: \(text)")
+                    try? self.conversationStorage.saveConversation(
+                        audioFrames: audioFrames,
+                        transcription: text
+                    )
+                    self.historyWindowController.appendTranscription("🧠 [Vault Memo] " + text)
+                }
+
                 self.updateIcon(symbol: "mic")
 
             } catch {
-                await self.textInjector.stopProcessingAnimation()
+                if mode == .standard {
+                    await self.textInjector.stopProcessingAnimation()
+                }
                 print("❌ Transcription error: \(error)")
                 self.updateIcon(symbol: "mic")
             }
@@ -458,7 +477,7 @@ final class App: NSObject, NSApplicationDelegate {
 // MARK: - KeyboardListenerDelegate
 
 extension App: KeyboardListenerDelegate {
-    func keyboardListenerDidStartRecording() {
+    func keyboardListenerDidStartRecording(mode: DictationMode) {
         guard transcriber != nil else {
             keyboardListener.forceAbort()
             NSApp.activate(ignoringOtherApps: true)
@@ -471,24 +490,28 @@ extension App: KeyboardListenerDelegate {
         }
         
         abortRequested = false
-        updateIcon(symbol: "mic.fill")
+        updateIcon(symbol: (mode == .memoryVault) ? "brain.head.profile" : "mic.fill")
         historyWindowController.setRecording(true)
-        FloatingRecordingIndicator.shared.show()
+        FloatingRecordingIndicator.shared.show(mode: mode)
 
         do {
             try audioRecorder.startRecording()
-            print("🎙️ Recording... (speak now)")
+            if mode == .memoryVault {
+                print("🎙️ Recording Voice Memory Note (Shift + Right Option)...")
+            } else {
+                print("🎙️ Recording... (speak now)")
+            }
         } catch {
             print("❌ Failed to start recording: \(error)")
             updateIcon(symbol: "mic")
         }
     }
 
-    func keyboardListenerDidStopRecording() {
-        print("⏹️  Recording stopped. Processing...")
+    func keyboardListenerDidStopRecording(mode: DictationMode) {
+        print("⏹️  Recording stopped. Processing (Mode: \(mode))...")
         historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
-        processRecording()
+        processRecording(mode: mode)
     }
 
     func keyboardListenerDidAbort() {

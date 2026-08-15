@@ -16,14 +16,18 @@ final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
     var onAbort: (() -> Void)?
 
-    private var window: NSWindow?
-    private var circleLayer: CALayer?
-    private let bgColor = NSColor(
+    private var imageView: NSImageView?
+    private let standardBgColor = NSColor(
         red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
+    private let memoryBgColor = NSColor(
+        red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 1.0)
 
     private init() {}
 
-    func show() {
+    func show(mode: DictationMode = .standard) {
+        let activeBgColor = (mode == .memoryVault) ? memoryBgColor : standardBgColor
+        let symbolName = (mode == .memoryVault) ? "brain.head.profile" : "mic.fill"
+
         if window == nil {
             let win = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 32, height: 32),
@@ -36,7 +40,7 @@ final class FloatingRecordingIndicator {
             win.ignoresMouseEvents = false
             win.hasShadow = false
 
-            // Create a minimal recording circle containing only the mic icon
+            // Create a minimal recording circle containing only the icon
             let container = ClickableContainerView(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
             container.wantsLayer = true
             container.onMouseDown = { [weak self] in
@@ -47,7 +51,6 @@ final class FloatingRecordingIndicator {
             circle.wantsLayer = true
             self.circleLayer = circle.layer
 
-            circle.layer?.backgroundColor = bgColor.withAlphaComponent(0.6).cgColor
             circle.layer?.cornerRadius = 14
             circle.layer?.borderWidth = 1.5
             circle.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
@@ -58,18 +61,21 @@ final class FloatingRecordingIndicator {
             circle.layer?.shadowOffset = CGSize(width: 0, height: -2)
             circle.layer?.shadowRadius = 3
 
-            // Native macOS SF Symbol mic icon only
-            let micImage = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
-            let imageView = NSImageView(frame: NSRect(x: 7, y: 6, width: 14, height: 16))
-            imageView.image = micImage
-            imageView.contentTintColor = .white
-            imageView.imageScaling = .scaleProportionallyUpOrDown
+            let imgView = NSImageView(frame: NSRect(x: 7, y: 6, width: 14, height: 16))
+            imgView.contentTintColor = .white
+            imgView.imageScaling = .scaleProportionallyUpOrDown
+            self.imageView = imgView
 
-            circle.addSubview(imageView)
+            circle.addSubview(imgView)
             container.addSubview(circle)
             win.contentView = container
             self.window = win
         }
+
+        circleLayer?.backgroundColor = activeBgColor.withAlphaComponent(0.6).cgColor
+        let symbolImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
+        imageView?.image = symbolImage
 
         let position = getIndicatorPosition()
         window?.setFrameOrigin(position)
@@ -84,8 +90,8 @@ final class FloatingRecordingIndicator {
 
         // Add pulsing recording animation to the background color
         let pulse = CABasicAnimation(keyPath: "backgroundColor")
-        pulse.fromValue = bgColor.withAlphaComponent(0.8).cgColor
-        pulse.toValue = bgColor.withAlphaComponent(0.3).cgColor
+        pulse.fromValue = activeBgColor.withAlphaComponent(0.8).cgColor
+        pulse.toValue = activeBgColor.withAlphaComponent(0.3).cgColor
         pulse.duration = 0.8
         pulse.autoreverses = true
         pulse.repeatCount = .infinity

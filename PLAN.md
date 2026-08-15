@@ -3,7 +3,7 @@
 ## Active Tasks
 
 - [x] **Plan 1 — Change Hotkey from Right Shift to Right Option** *(Priority: 🔴 High)*
-- [ ] **Plan 2 — Hands-Free Voice Memory Logging & Session Handover into `memory` CLI** *(Priority: 🟡 Medium)*
+- [x] **Plan 2 — Hands-Free Voice Memory Logging (`Shift + Right Option`) & Local Conversation Archiving** *(Priority: 🟡 Medium)*
 - [x] **Plan 3 — Context-Aware Dynamic Vocabulary Injection via Memory Graph** *(Priority: 🟢 Low/Medium)*
 
 ---
@@ -46,23 +46,27 @@
 
 ---
 
-# Plan 2 — Hands-Free Voice Memory Logging & Session Handover into `memory` CLI
+# Plan 2 — Hands-Free Voice Memory Logging (`Shift + Right Option`) & Local Conversation Archiving
 
 ## 1) Task Summary
 - Module: `voicetyper/`
-- Goal: Ingest transcribed speech notes, architectural decisions, and bug post-mortems directly into `memory` vault via dedicated shortcut chord (e.g. `Right Option + M`) and non-interactive CLI execution (`memory store`).
-- Type: Integration feature
+- Goal: Record voice conversation memos via dedicated modifier chord (`Shift + Right Option`), saving raw 16kHz mono WAV audio clips to `~/.voicetyper/conversation/audio/` and transcribed text to `~/.voicetyper/conversation/text/`, without typing into or modifying the active cursor/clipboard.
+- Type: Feature & Storage module
 - Priority: Medium
 
 ## 2) Scope & Invariants
-- Add a dedicated memory capture chord (e.g., holding `Right Option` while pressing `M` or double-tapping `M`) that flags the dictation buffer for memory ingestion rather than standard clipboard text injection.
-- Transcribes audio locally using Whisper.cpp / Parakeet engine.
-- Automatically routes output to non-interactive CLI:
-  ```bash
-  memory store "<Transcribed Content>" --type=conversation --tags="voice,memo,handover" --scope=project
-  ```
-- Optional automatic heuristic classification (`--type=decision` or `--type=learn` when keywords like "decision:" or "learned:" are detected in the spoken transcript).
-- Preserves 100% offline-first privacy guarantees without cloud API dependencies.
+- Dual-mode keystroke detection in `KeyboardListener.swift`:
+  - `Right Option` alone $\rightarrow$ `.standard` dictation (pastes to active window).
+  - `Shift + Right Option` $\rightarrow$ `.memoryVault` mode (archives audio WAV + text without cursor pasting).
+- `VoiceConversationStorage.swift`:
+  - Automatically ensures `~/.voicetyper/conversation/audio/` and `~/.voicetyper/conversation/text/` exist.
+  - Encodes captured Float PCM frames into compliant 16-bit mono 16kHz WAV format (`conversation_<timestamp>_<id>.wav`).
+  - Writes transcribed UTF-8 text (`conversation_<timestamp>_<id>.txt`).
+- `MemoryVaultIngester.swift`:
+  - Heuristic intent classifier for decision, learn, rule, fact, and standup tags.
+- Visual HUD feedback:
+  - `FloatingRecordingIndicator.swift` displays a purple brain indicator (`🧠 🔴`) during memory recording.
+- Preserves 100% offline privacy and clipboard invariants.
 
 ---
 

@@ -1,13 +1,24 @@
 import Cocoa
 import Foundation
 
+// MARK: - DictationMode
+
+/// Represents the operating mode for the dictation recording session.
+public enum DictationMode: Sendable, Equatable {
+    /// Standard dictation (Right Option alone) -> Transcribes and injects text into active window.
+    case standard
+
+    /// Voice memory note (Shift + Right Option) -> Transcribes and archives raw audio WAV + text in ~/.voicetyper/conversation.
+    case memoryVault
+}
+
 // MARK: - KeyboardListenerDelegate
 
 /// Callbacks from the hold-to-talk state machine.
 @MainActor
 protocol KeyboardListenerDelegate: AnyObject, Sendable {
-    func keyboardListenerDidStartRecording()
-    func keyboardListenerDidStopRecording()
+    func keyboardListenerDidStartRecording(mode: DictationMode)
+    func keyboardListenerDidStopRecording(mode: DictationMode)
     func keyboardListenerDidAbort()
 }
 
@@ -16,7 +27,7 @@ protocol KeyboardListenerDelegate: AnyObject, Sendable {
 /// Monitors global keyboard events via CGEvent tap.
 ///
 /// Implements a hold-to-talk state machine with:
-/// - **Hold-to-Record**: Hold Right Option to record, release to process.
+/// - **Hold-to-Record**: Hold Right Option (Standard) or Shift + Right Option (Memory Vault).
 /// - **Grace Period**: 400ms window after release to resume recording
 ///   (allows brief pauses mid-sentence without chopping audio).
 /// - **Double-Tap Abort**: Two rapid presses within 400ms aborts the
@@ -26,6 +37,7 @@ final class KeyboardListener: @unchecked Sendable {
 
     private var isKeyPressed = false
     private var isRecording = false
+    private var activeMode: DictationMode = .standard
     private var lastPressTime: TimeInterval = 0
     private var lastReleaseTime: TimeInterval = 0
     private let gracePeriodSeconds: TimeInterval = 0.8
@@ -144,7 +156,9 @@ final class KeyboardListener: @unchecked Sendable {
 
         if isOptionDown {
             if !isKeyPressed {
-                handleKeyDown()
+                let isShiftDown = event.flags.contains(.maskShift)
+                let mode: DictationMode = isShiftDown ? .memoryVault : .standard
+                handleKeyDown(mode: mode)
             }
         } else {
             if isKeyPressed {
@@ -153,13 +167,14 @@ final class KeyboardListener: @unchecked Sendable {
         }
     }
 
-    private func handleKeyDown() {
+    private func handleKeyDown(mode: DictationMode) {
         let now = ProcessInfo.processInfo.systemUptime
         let timeSinceLastRelease = now - lastReleaseTime
         let timeSinceLastPress = now - lastPressTime
 
         lastPressTime = now
         isKeyPressed = true
+        self.activeMode = mode
 
         // Double-tap abort: if user taps Right Option twice rapidly (< 300ms since release)
         if isRecording, timeSinceLastRelease < 0.3, timeSinceLastPress < 0.6 {
@@ -173,7 +188,8 @@ final class KeyboardListener: @unchecked Sendable {
         if !isRecording {
             // Fresh start
             isRecording = true
-            Task { @MainActor in delegate?.keyboardListenerDidStartRecording() }
+            let recordingMode = self.activeMode
+            Task { @MainActor in delegate?.keyboardListenerDidStartRecording(mode: recordingMode) }
         } else {
             // Resumed within grace period — cancel the pending stop
             cancelGraceTimer()
@@ -215,7 +231,8 @@ final class KeyboardListener: @unchecked Sendable {
         guard !isKeyPressed, isRecording else { return }
 
         isRecording = false
-        Task { @MainActor in delegate?.keyboardListenerDidStopRecording() }
+        let finishedMode = self.activeMode
+        Task { @MainActor in delegate?.keyboardListenerDidStopRecording(mode: finishedMode) }
     }
 
     // MARK: - API

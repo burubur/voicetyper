@@ -79,3 +79,17 @@ Click into any text editor (even a blank document) to begin testing.
 **Expected result:** 
 - The technical terms `minkowski`, `OpenSCAD`, and `Bouwplank` appear with exact casing and spelling rather than phonetic corruptions (e.g. not *"men cow ski"* or *"open scab"*).
 - When holding the hotkey in complete silence, no injected prompt keywords are leaked or pasted into the active text field.
+
+## Scenario 9: Voice Conversation Note Archiving (`Shift + Right Option`)
+**Goal:** Verify that holding `Shift + Right Option` records a voice conversation memo, saves the raw audio WAV to `~/.voicetyper/conversation/audio/`, and saves the transcribed text to `~/.voicetyper/conversation/text/` without injecting text into the active cursor.
+**Action:**
+1. Focus any text field with existing text.
+2. Hold `Shift + Right Option`. The floating indicator turns purple with a brain icon (`🧠 🔴`).
+3. Speak:
+> "Decision: We are standardizing all civil CAD diagrams on OpenSCAD and Three.js runtime."
+4. Release the keys.
+**Expected result:**
+- The active cursor and text field are **not** typed into (no clipboard pasting occurs).
+- Raw audio is saved to `~/.voicetyper/conversation/audio/conversation_<timestamp>_<id>.wav`.
+- Transcribed text is saved to `~/.voicetyper/conversation/text/conversation_<timestamp>_<id>.txt`.
+- Transcription History window logs the entry with `🧠 [Vault Memo]`.
