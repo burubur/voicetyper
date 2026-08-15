@@ -57,3 +57,16 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 ### 4.2 Offline ML Ecosystem
 - All voice data must be ingested and inferred directly against `.bin` weight files via an offline ML loop. The application defaults to downloading and loading the `ggml-base.en.bin` (~142MB) model locally.
 - Provides fallback configurability via an `.xcconfig` file for loading alternative quantized constraints.
+
+---
+
+## 5. Universal Memory Vault Integration
+
+### 5.1 Voice Memory & Spoken Standup Capture
+- **ML Processing Pipeline**: Leverages VoiceTyper's on-device `llama.cpp` / `parakeet` / `whisper` inference engines to transcribe spoken developer thoughts, audio memos, and standup updates.
+- **Direct CLI Ingestion**: Automatically dispatches transcribed text to the `memory` CLI:
+  ```bash
+  memory store "<Transcribed Content>" --type=conversation --conversation-id="<audio-memo-id>" --tags="voice,memo" --scope=project
+  ```
+- **Associative Recall**: Transcribed speech memos become instantly recallable by AI coding agents via `memory recall` and `memory thread`.
+

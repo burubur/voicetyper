@@ -3,6 +3,7 @@
 ## Active Tasks
 
 - [x] **Plan 1 — Change Hotkey from Right Shift to Right Option** *(Priority: 🔴 High)*
+- [ ] **Plan 2 — Voice Memory & Spoken Standup Ingestion into `memory` CLI** *(Priority: 🟡 Medium)*
 
 ---
 
@@ -41,3 +42,18 @@
 3. Edit `TranscriptionHistoryWindowController.swift` to update status label string.
 4. Update product & specification docs.
 5. Build and verify using Swift CLI (`swift build`).
+
+---
+
+# Plan 2 — Voice Memory & Spoken Standup Ingestion into `memory` CLI
+
+## 1) Task Summary
+- Module: `voicetyper/`
+- Goal: Ingest transcribed speech notes and audio memos directly into `memory` vault via CLI execution (`memory store --type=conversation`).
+- Type: Integration feature
+- Priority: Medium
+
+## 2) Scope & Invariants
+- Uses local `llama.cpp` / `parakeet` / `whisper` inference models.
+- Invokes `memory store "<content>" --type=conversation --conversation-id="<id>" --tags="voice,memo"` non-interactively.
+- Preserves offline-first privacy guarantees.
