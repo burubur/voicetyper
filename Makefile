@@ -1,8 +1,12 @@
-.PHONY: build run stop download-models debug install uninstall clean
+.PHONY: build test run stop download-models debug install uninstall clean
 
 # Builds the VoiceTyper executable target
 build:
 	swift build
+
+# Runs unit and integration test suites
+test:
+	swift test
 
 # Runs the VoiceTyper executable in the background
 run:

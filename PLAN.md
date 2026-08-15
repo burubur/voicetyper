@@ -3,7 +3,8 @@
 ## Active Tasks
 
 - [x] **Plan 1 — Change Hotkey from Right Shift to Right Option** *(Priority: 🔴 High)*
-- [ ] **Plan 2 — Voice Memory & Spoken Standup Ingestion into `memory` CLI** *(Priority: 🟡 Medium)*
+- [ ] **Plan 2 — Hands-Free Voice Memory Logging & Session Handover into `memory` CLI** *(Priority: 🟡 Medium)*
+- [x] **Plan 3 — Context-Aware Dynamic Vocabulary Injection via Memory Graph** *(Priority: 🟢 Low/Medium)*
 
 ---
 
@@ -45,15 +46,35 @@
 
 ---
 
-# Plan 2 — Voice Memory & Spoken Standup Ingestion into `memory` CLI
+# Plan 2 — Hands-Free Voice Memory Logging & Session Handover into `memory` CLI
 
 ## 1) Task Summary
 - Module: `voicetyper/`
-- Goal: Ingest transcribed speech notes and audio memos directly into `memory` vault via CLI execution (`memory store --type=conversation`).
+- Goal: Ingest transcribed speech notes, architectural decisions, and bug post-mortems directly into `memory` vault via dedicated shortcut chord (e.g. `Right Option + M`) and non-interactive CLI execution (`memory store`).
 - Type: Integration feature
 - Priority: Medium
 
 ## 2) Scope & Invariants
-- Uses local `llama.cpp` / `parakeet` / `whisper` inference models.
-- Invokes `memory store "<content>" --type=conversation --conversation-id="<id>" --tags="voice,memo"` non-interactively.
-- Preserves offline-first privacy guarantees.
+- Add a dedicated memory capture chord (e.g., holding `Right Option` while pressing `M` or double-tapping `M`) that flags the dictation buffer for memory ingestion rather than standard clipboard text injection.
+- Transcribes audio locally using Whisper.cpp / Parakeet engine.
+- Automatically routes output to non-interactive CLI:
+  ```bash
+  memory store "<Transcribed Content>" --type=conversation --tags="voice,memo,handover" --scope=project
+  ```
+- Optional automatic heuristic classification (`--type=decision` or `--type=learn` when keywords like "decision:" or "learned:" are detected in the spoken transcript).
+- Preserves 100% offline-first privacy guarantees without cloud API dependencies.
+
+---
+
+# Plan 3 — Context-Aware Dynamic Vocabulary Injection via Memory Graph
+
+## 1) Task Summary
+- Module: `voicetyper/`
+- Goal: Dynamically query the active `memory` graph / workspace glossary and bias the local Whisper speech decoder with project-specific terminology to eliminate phoneme hallucinations.
+- Type: ML inference enhancement
+- Priority: Low / Medium
+
+## 2) Scope & Invariants
+- Query active domain vocabulary from `memory` (e.g. OpenSCAD primitives `minkowski`, `translate`, `difference`; civil engineering terms `west_elevation`, `trench_z0`; DDD terms `aggregates`, `value_objects`).
+- Pass extracted terminology into `whisper.cpp`'s initial prompt context buffer (`--prompt` token biasing) during model initialization or session start.
+- Significantly improves transcription accuracy of code symbols, architecture jargon, and geodesy terms without requiring model fine-tuning or internet connectivity.

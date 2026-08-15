@@ -7,10 +7,12 @@ import SherpaOnnxC
 /// Adapter that uses sherpa-onnx to run NVIDIA Parakeet models (CTC and Transducer).
 final class ParakeetTranscriber: Transcriber, @unchecked Sendable {
     private let recognizer: SherpaOnnxOfflineRecognizer
+    private(set) var activeVocabulary: [String] = []
 
     /// Initializes the transcriber by loading an ONNX Parakeet model directory.
     /// - Parameter modelDir: Path to the directory containing the ONNX files and tokens.txt.
-    init(modelDir: URL) throws {
+    init(modelDir: URL, vocabulary: [String] = []) throws {
+        self.activeVocabulary = vocabulary
         let encoderPath = modelDir.appendingPathComponent("encoder.int8.onnx").path
         let decoderPath = modelDir.appendingPathComponent("decoder.int8.onnx").path
         let joinerPath = modelDir.appendingPathComponent("joiner.int8.onnx").path
@@ -62,6 +64,11 @@ final class ParakeetTranscriber: Transcriber, @unchecked Sendable {
         self.recognizer = SherpaOnnxOfflineRecognizer(config: &config)
     }
 
+    /// Sets or updates the active vocabulary terms for canonical normalization.
+    func setVocabulary(terms: [String]) {
+        self.activeVocabulary = terms
+    }
+
     /// Transcribes 16kHz mono PCM float audio frames into text.
     func transcribe(audioFrames: [Float]) async throws -> String {
         return await Task.detached {
@@ -81,7 +88,12 @@ final class ParakeetTranscriber: Transcriber, @unchecked Sendable {
                 text = String(firstChar).uppercased() + text.dropFirst()
             }
             
-            return text
+            // Post-processing canonical vocabulary terms
+            return VocabularySanitizer.sanitizeOutput(
+                transcription: text,
+                injectedPrompt: nil,
+                activeVocabulary: self.activeVocabulary
+            )
         }.value
     }
 }

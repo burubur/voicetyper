@@ -14,12 +14,27 @@ protocol Transcriber: Sendable {
 /// offline speech-to-text transcription.
 final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     private let whisper: Whisper
+    private(set) var activeVocabulary: [String] = []
+    private(set) var initialPrompt: String?
 
     /// Initializes the transcriber by loading a GGML model file.
     /// - Parameter modelURL: Path to the whisper GGML model (e.g. `ggml-base.en.bin`).
     /// - Throws: If the model file cannot be loaded.
-    init(modelURL: URL) throws {
+    init(modelURL: URL, vocabulary: [String] = []) throws {
         self.whisper = Whisper(fromFileURL: modelURL)
+        if !vocabulary.isEmpty {
+            self.setVocabulary(terms: vocabulary)
+        }
+    }
+
+    /// Sets or updates the active vocabulary and initial prompt biasing.
+    func setVocabulary(terms: [String]) {
+        self.activeVocabulary = terms
+        let prompt = VocabularyManager.buildWhisperPrompt(from: terms)
+        self.initialPrompt = prompt.isEmpty ? nil : prompt
+        if let p = self.initialPrompt {
+            self.whisper.params.prompt = p
+        }
     }
 
     /// Transcribes 16kHz mono PCM float audio frames into text.
@@ -51,7 +66,12 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
             return ""
         }
 
-        return text
+        // 3. Apply post-processing sanitizer (detects prompt leakage & restores canonical casing)
+        return VocabularySanitizer.sanitizeOutput(
+            transcription: text,
+            injectedPrompt: self.initialPrompt,
+            activeVocabulary: self.activeVocabulary
+        )
     }
 
     // MARK: - Model Discovery

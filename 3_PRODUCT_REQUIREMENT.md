@@ -62,11 +62,19 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 
 ## 5. Universal Memory Vault Integration
 
-### 5.1 Voice Memory & Spoken Standup Capture
-- **ML Processing Pipeline**: Leverages VoiceTyper's on-device `llama.cpp` / `parakeet` / `whisper` inference engines to transcribe spoken developer thoughts, audio memos, and standup updates.
-- **Direct CLI Ingestion**: Automatically dispatches transcribed text to the `memory` CLI:
+### 5.1 Hands-Free Voice Memory Logging & Live Session Handover
+- **ML Processing Pipeline**: Leverages VoiceTyper's on-device `llama.cpp` / `parakeet` / `whisper` inference engines to transcribe spoken developer thoughts, architectural decisions, bug learnings, and standup updates.
+- **Dedicated Shortcut Chord**: Activating `Right Option + M` (or double-tapping `M` during dictation) directs the transcribed stream into the background `memory` vault rather than pasting into the active text field.
+- **Direct CLI Ingestion**: Automatically dispatches transcribed text to the `memory` CLI with heuristic classification:
   ```bash
-  memory store "<Transcribed Content>" --type=conversation --conversation-id="<audio-memo-id>" --tags="voice,memo" --scope=project
+  memory store "<Transcribed Content>" --type=conversation --tags="voice,memo,handover" --scope=project
   ```
+  - If the transcript begins with "decision:" or "decided:", automatically tags `--type=decision`.
+  - If the transcript begins with "learned:" or "rule:", automatically tags `--type=learn`.
 - **Associative Recall**: Transcribed speech memos become instantly recallable by AI coding agents via `memory recall` and `memory thread`.
+
+### 5.2 Context-Aware Dynamic Vocabulary Injection
+- **Problem**: Technical jargon (e.g., OpenSCAD functions `minkowski()`, DDD patterns `aggregate_root`, geodesy landmarks `west_elevation`) often suffers phoneme degradation in generic offline Whisper models.
+- **Memory Glossary Biasing**: On startup or workspace switch, VoiceTyper queries the active `memory` graph / glossary terms.
+- **Prompt Token Biasing**: Dynamically seeds `whisper.cpp`'s `--prompt` context buffer with project-specific terminology, drastically improving speech-to-code accuracy without fine-tuning models.
 

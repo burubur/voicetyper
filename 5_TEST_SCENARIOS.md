@@ -69,3 +69,13 @@ Click into any text editor (even a blank document) to begin testing.
 2. Release `Right Option`. The `processing...` animation will begin typing.
 3. Immediately press `Control + C` on your keyboard.
 **Expected result:** The `processing...` animation instantly stops and deletes itself. The terminal logs `🚫 Aborted. Dictation discarded.`, and no final transcribed text is injected.
+
+## Scenario 8: Dynamic Vocabulary Biasing & Prompt Leakage Prevention
+**Goal:** Verify that domain-specific technical terms (e.g. OpenSCAD, minkowski, Bouwplank, AggregateRoot) are recognized accurately without hallucinations.
+**Action:**
+1. Hold `Right Option` and speak:
+> "We should test the minkowski operator in OpenSCAD for the Bouwplank layout."
+2. Release `Right Option`.
+**Expected result:** 
+- The technical terms `minkowski`, `OpenSCAD`, and `Bouwplank` appear with exact casing and spelling rather than phonetic corruptions (e.g. not *"men cow ski"* or *"open scab"*).
+- When holding the hotkey in complete silence, no injected prompt keywords are leaked or pasted into the active text field.

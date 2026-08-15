@@ -21,5 +21,12 @@ let package = Package(
             ],
             path: "Sources/VoiceTyper"
         ),
+        .testTarget(
+            name: "VoiceTyperTests",
+            dependencies: [
+                "VoiceTyper"
+            ],
+            path: "Tests/VoiceTyperTests"
+        )
     ]
 )

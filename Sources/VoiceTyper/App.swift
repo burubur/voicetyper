@@ -13,6 +13,7 @@ final class App: NSObject, NSApplicationDelegate {
     private let keyboardListener = KeyboardListener()
     private let historyWindowController = TranscriptionHistoryWindowController()
     private var transcriber: Transcriber?
+    private var activeVocabulary: [String] = []
 
     /// Tracks whether an abort was requested to cancel in-flight transcription.
     private var abortRequested = false
@@ -36,6 +37,19 @@ final class App: NSObject, NSApplicationDelegate {
         }
         
         loadModel()
+
+        // Asynchronously load dynamic ubiquitous vocabulary from memory graph/cache
+        Task { [weak self] in
+            guard let self = self else { return }
+            let vocab = await VocabularyManager.loadActiveVocabulary()
+            self.activeVocabulary = vocab
+            if let whisper = self.transcriber as? WhisperTranscriber {
+                whisper.setVocabulary(terms: vocab)
+            } else if let parakeet = self.transcriber as? ParakeetTranscriber {
+                parakeet.setVocabulary(terms: vocab)
+            }
+            print("🧠 Loaded \(vocab.count) domain vocabulary terms for dynamic biasing.")
+        }
     }
 
     // MARK: - Setup
@@ -211,10 +225,10 @@ final class App: NSObject, NSApplicationDelegate {
     private func finishLoadingModel(url: URL) {
         do {
             if !url.path.contains("parakeet") {
-                transcriber = try WhisperTranscriber(modelURL: url)
+                transcriber = try WhisperTranscriber(modelURL: url, vocabulary: activeVocabulary)
                 print("✅ Whisper model loaded from: \(url.path)")
             } else {
-                transcriber = try ParakeetTranscriber(modelDir: url)
+                transcriber = try ParakeetTranscriber(modelDir: url, vocabulary: activeVocabulary)
                 print("✅ Parakeet model loaded from: \(url.path)")
             }
             keyboardListener.start()
@@ -255,14 +269,14 @@ final class App: NSObject, NSApplicationDelegate {
 
         do {
             if !filename.contains("parakeet") {
-                transcriber = try WhisperTranscriber(modelURL: modelURL)
+                transcriber = try WhisperTranscriber(modelURL: modelURL, vocabulary: activeVocabulary)
             } else {
                 let parakeetDir = WhisperTranscriber.defaultModelDirectory.appendingPathComponent(
                     filename == "parakeet-unified-0.6b"
                         ? "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming"
                         : "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
                 )
-                transcriber = try ParakeetTranscriber(modelDir: parakeetDir)
+                transcriber = try ParakeetTranscriber(modelDir: parakeetDir, vocabulary: activeVocabulary)
             }
             UserDefaults.standard.set(filename, forKey: "WHISPER_MODEL")
             rebuildMenuBar()
