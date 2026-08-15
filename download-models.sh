@@ -18,7 +18,16 @@ MODELS=(
 
 # Function to download a single model
 download_model() {
-    local RAW_NAME=$1
+    local RAW_INPUT=$1
+    local RAW_NAME
+    RAW_NAME=$(basename "$RAW_INPUT")
+
+    # Validate model identifier to prevent path traversal
+    if [[ ! "$RAW_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "❌ Invalid model name provided: $RAW_INPUT"
+        return 1
+    fi
+
     mkdir -p "$MODEL_DIR"
 
     if [[ "$RAW_NAME" == *"parakeet"* ]]; then

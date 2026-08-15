@@ -52,7 +52,8 @@ echo "✅ VoiceTyper installed successfully!"
 echo "🚀 Starting VoiceTyper in the background..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
-nohup "$INSTALL_DIR/voicetyper" > ~/.voicetyper/app.log 2>&1 &
+mkdir -p "$HOME/.voicetyper"
+nohup "$INSTALL_DIR/voicetyper" > "$HOME/.voicetyper/app.log" 2>&1 &
 
 echo "It is now running in your menu bar (simple mic icon)."
 echo "To see diagnostic logs, you can stop it and run it manually in a custom terminal: voicetyper --debug"

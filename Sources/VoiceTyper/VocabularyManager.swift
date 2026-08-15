@@ -108,7 +108,7 @@ public final class VocabularyManager: Sendable {
             .joined(separator: "\n")
     }
 
-    /// Fetches terms dynamically by executing the local `memory term list` CLI.
+    /// Fetches terms dynamically by executing the local `memory term list` CLI with timeout and deadlock protection.
     public static func fetchVocabularyFromMemoryCLI() async -> [String] {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -120,13 +120,30 @@ public final class VocabularyManager: Sendable {
                 process.standardOutput = pipe
                 process.standardError = FileHandle.nullDevice
 
+                let timerSource = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+                timerSource.schedule(deadline: .now() + 3.0)
+                timerSource.setEventHandler {
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                }
+                timerSource.resume()
+
                 do {
                     try process.run()
-                    process.waitUntilExit()
+                    // Read pipe data before waitUntilExit to prevent buffer deadlock
                     let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let terms = parseGlossaryTerms(from: data)
-                    continuation.resume(returning: terms)
+                    process.waitUntilExit()
+                    timerSource.cancel()
+
+                    if process.terminationStatus == 0 {
+                        let terms = parseGlossaryTerms(from: data)
+                        continuation.resume(returning: terms)
+                    } else {
+                        continuation.resume(returning: [])
+                    }
                 } catch {
+                    timerSource.cancel()
                     continuation.resume(returning: [])
                 }
             }

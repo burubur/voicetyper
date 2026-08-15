@@ -16,6 +16,8 @@ final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
     var onAbort: (() -> Void)?
 
+    private var window: NSWindow?
+    private var circleLayer: CALayer?
     private var imageView: NSImageView?
     private let standardBgColor = NSColor(
         red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
@@ -115,8 +117,8 @@ final class FloatingRecordingIndicator {
 
     /// Places the indicator at the bottom center of the active screen.
     private func getIndicatorPosition() -> NSPoint {
-        let screen = NSScreen.main ?? NSScreen.screens.first!
-        let screenFrame = screen.visibleFrame
+        let screenFrame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
         let indicatorWidth: CGFloat = 32.0  // Matches the window width from show()
         let paddingBottom: CGFloat = 40.0  // Sensible padding from the bottom

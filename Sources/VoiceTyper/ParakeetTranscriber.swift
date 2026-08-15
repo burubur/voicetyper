@@ -19,6 +19,18 @@ final class ParakeetTranscriber: Transcriber, @unchecked Sendable {
         let tokensPath = modelDir.appendingPathComponent("tokens.txt").path
         let modelPath = modelDir.appendingPathComponent("model.int8.onnx").path
 
+        var allocatedPointers: [UnsafeMutablePointer<CChar>] = []
+        func cString(_ str: String) -> UnsafePointer<CChar> {
+            let ptr = strdup(str)!
+            allocatedPointers.append(ptr)
+            return UnsafePointer(ptr)
+        }
+        defer {
+            for ptr in allocatedPointers {
+                free(ptr)
+            }
+        }
+
         let fileManager = FileManager.default
         let featConfig = sherpaOnnxFeatureConfig(
             sampleRate: 16000,
@@ -27,34 +39,34 @@ final class ParakeetTranscriber: Transcriber, @unchecked Sendable {
         var config = SherpaOnnxOfflineRecognizerConfig()
         memset(&config, 0, MemoryLayout<SherpaOnnxOfflineRecognizerConfig>.size)
         config.feat_config = featConfig
-        config.decoding_method = UnsafePointer(strdup("greedy_search"))
+        config.decoding_method = cString("greedy_search")
         config.max_active_paths = 4
 
         var modelConfig = SherpaOnnxOfflineModelConfig()
         memset(&modelConfig, 0, MemoryLayout<SherpaOnnxOfflineModelConfig>.size)
-        modelConfig.tokens = UnsafePointer(strdup(tokensPath))
+        modelConfig.tokens = cString(tokensPath)
         modelConfig.num_threads = 4
         modelConfig.debug = 0
-        modelConfig.provider = UnsafePointer(strdup("cpu"))
+        modelConfig.provider = cString("cpu")
         
         if fileManager.fileExists(atPath: joinerPath) {
             // Transducer model (parakeet-unified)
             var transducerConfig = SherpaOnnxOfflineTransducerModelConfig()
             memset(&transducerConfig, 0, MemoryLayout<SherpaOnnxOfflineTransducerModelConfig>.size)
-            transducerConfig.encoder = UnsafePointer(strdup(encoderPath))
-            transducerConfig.decoder = UnsafePointer(strdup(decoderPath))
-            transducerConfig.joiner = UnsafePointer(strdup(joinerPath))
+            transducerConfig.encoder = cString(encoderPath)
+            transducerConfig.decoder = cString(decoderPath)
+            transducerConfig.joiner = cString(joinerPath)
             
             modelConfig.transducer = transducerConfig
-            modelConfig.model_type = UnsafePointer(strdup("nemo_transducer"))
+            modelConfig.model_type = cString("nemo_transducer")
         } else if fileManager.fileExists(atPath: modelPath) {
             // CTC model (parakeet-tdt)
             var ctcConfig = SherpaOnnxOfflineNemoEncDecCtcModelConfig()
             memset(&ctcConfig, 0, MemoryLayout<SherpaOnnxOfflineNemoEncDecCtcModelConfig>.size)
-            ctcConfig.model = UnsafePointer(strdup(modelPath))
+            ctcConfig.model = cString(modelPath)
             
             modelConfig.nemo_ctc = ctcConfig
-            modelConfig.model_type = UnsafePointer(strdup("nemo_ctc"))
+            modelConfig.model_type = cString("nemo_ctc")
         } else {
             throw NSError(domain: "ParakeetTranscriber", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Parakeet model directory structure"])
         }
