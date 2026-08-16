@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Downloads whisper.cpp GGML and NVIDIA Parakeet ONNX models for VoiceTyper.
 # Usage: ./download-models.sh [optional-specific-model]
 # If no arguments are provided, default models will be downloaded.
@@ -15,6 +15,18 @@ MODELS=(
     "ggml-small.en.bin"
     "parakeet-unified-0.6b"
 )
+
+echo " __      __  _           _______                     "
+echo " \\ \\    / / (_)         |__   __|                    "
+echo "  \\ \\  / /__ _  ___ ___    | |_   _ _ __   ___ _ __ "
+echo "   \\ \\/ / _ \\ |/ __/ _ \\   | | | | | '_ \\ / _ \\ '__|"
+echo "    \\  / (_) | | (_|  __/   | | |_| | |_) |  __/ |   "
+echo "     \\/ \\___/|_|\\___\\___|   |_|\\__, | .__/ \\___|_|   "
+echo "                                __/ | |              "
+echo "                               |___/|_|              "
+echo "================================================================="
+echo "🎙️ VoiceTyper Model Downloader"
+echo "================================================================="
 
 # Function to download a single model
 download_model() {
