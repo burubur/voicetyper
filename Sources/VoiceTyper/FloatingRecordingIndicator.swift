@@ -107,10 +107,10 @@ final class FloatingRecordingIndicator {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
             window.animator().alphaValue = 0.0
-        } completionHandler: {
+        } completionHandler: { [weak self] in
             DispatchQueue.main.async {
                 window.orderOut(nil)
-                self.circleLayer?.removeAnimation(forKey: "recordingPulse")
+                self?.circleLayer?.removeAnimation(forKey: "recordingPulse")
             }
         }
     }

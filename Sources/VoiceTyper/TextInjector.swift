@@ -7,13 +7,15 @@ import Foundation
 /// borrowing the clipboard and simulating Cmd+V.
 ///
 /// The original clipboard contents are saved and restored after a short delay.
-final class TextInjector: @unchecked Sendable {
+@MainActor
+final class TextInjector {
 
     /// Injects text into the focused window via clipboard paste.
     /// - Parameter text: The text to inject.
     func injectText(_ text: String) {
         print("📝 Preparing to inject text: '\(text)'")
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             let pasteboard = NSPasteboard.general
 
             // Save existing clipboard contents
@@ -32,7 +34,8 @@ final class TextInjector: @unchecked Sendable {
             pasteboard.setString(text, forType: .string)
 
             // Brief delay for macOS to register the new clipboard
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self = self else { return }
                 print("📋 Simulating Cmd+V paste...")
                 // Simulate Cmd+V
                 self.simulatePaste()

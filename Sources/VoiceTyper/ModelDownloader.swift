@@ -1,6 +1,5 @@
-import Foundation
-
-final class ModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+@MainActor
+final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     static let shared = ModelDownloader()
     
     var isDownloading = false
@@ -14,7 +13,12 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Se
     private var completionCallback: ((Bool) -> Void)?
     
     private let modelName = "ggml-base.en.bin"
-    private let downloadURL = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin")!
+    private let downloadURL: URL = {
+        guard let url = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin") else {
+            fatalError("Invalid static model download URL configuration")
+        }
+        return url
+    }()
     
     private var modelDir: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -65,10 +69,11 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Se
     
     // MARK: - URLSessionDownloadDelegate
     
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         if totalBytesExpectedToWrite > 0 {
             let percentage = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 self.progress = percentage
                 let mbWritten = totalBytesWritten / 1_048_576
                 let mbTotal = totalBytesExpectedToWrite / 1_048_576
@@ -78,36 +83,39 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Se
         }
     }
     
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        DispatchQueue.main.async {
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
             self.isDownloading = false
+            session.finishTasksAndInvalidate()
             
             let targetFile = self.modelDir.appendingPathComponent(self.modelName)
             do {
                 if FileManager.default.fileExists(atPath: targetFile.path) {
-                    try FileManager.default.removeItem(at: targetFile)
+                    _ = try FileManager.default.replaceItemAt(targetFile, withItemAt: location, backupItemName: nil, options: .usingNewMetadataOnly)
+                } else {
+                    try FileManager.default.moveItem(at: location, to: targetFile)
                 }
-                try FileManager.default.moveItem(at: location, to: targetFile)
                 self.statusText = "Ready!"
                 self.completionCallback?(true)
             } catch {
-                print("File move failed: \(error)")
+                print("File installation failed: \(error)")
                 self.statusText = "Failed to save model"
                 self.completionCallback?(false)
             }
         }
     }
     
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 print("Download failed: \(error.localizedDescription)")
                 self.isDownloading = false
                 self.statusText = "Download Failed"
                 self.completionCallback?(false)
+                session.finishTasksAndInvalidate()
             }
         }
     }
-    
-
 }

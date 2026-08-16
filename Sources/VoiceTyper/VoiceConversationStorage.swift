@@ -53,7 +53,7 @@ public final class VoiceConversationStorage: Sendable {
 
         // 1. Generate & write WAV data
         let wavData = Self.createWavData(from: audioFrames, sampleRate: sampleRate)
-        try wavData.write(to: wavURL)
+        try wavData.write(to: wavURL, options: .atomic)
 
         // 2. Write Transcribed Text (UTF-8)
         let textContent = transcription.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -78,3 +78,19 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 - **Memory Glossary Biasing**: On startup or workspace switch, VoiceTyper queries the active `memory` graph / glossary terms.
 - **Prompt Token Biasing**: Dynamically seeds `whisper.cpp`'s `--prompt` context buffer with project-specific terminology, drastically improving speech-to-code accuracy without fine-tuning models.
 
+---
+
+## 6. Swift Quality Gates & Crash Prevention
+
+### 6.1 Safe C-Bridge Memory Management & Zero Force Unwraps (`SWIFT-01`)
+- **SAFE-C-01**: `ParakeetTranscriber` and all C-interop bindings must strictly prohibit force unwrapping (`!`) on nullable C memory pointers (`strdup`, `malloc`, C struct handles).
+- **SAFE-C-02**: All C pointer duplication must be guarded by safe conditional unwrapping with throwing domain errors:
+  ```swift
+  guard let ptr = strdup(str) else {
+      throw TranscriberError.outOfMemory("Failed to duplicate C string buffer")
+  }
+  ```
+- **SAFE-C-03**: Prohibit silent error suppression (`try?`) on disk archiving operations (`saveConversation`); all I/O errors must be explicitly caught and logged with structured diagnostics.
+- **SAFE-C-04**: Maintain strict `@MainActor` isolation across all asynchronous UI animations and downloader managers to guarantee thread safety.
+
+

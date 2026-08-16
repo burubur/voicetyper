@@ -444,10 +444,14 @@ final class App: NSObject, NSApplicationDelegate {
                 } else {
                     // Memory Vault Mode: Archive raw audio WAV and text to ~/.voicetyper/conversation/
                     print("🧠 Archiving voice conversation note: \(text)")
-                    try? self.conversationStorage.saveConversation(
-                        audioFrames: audioFrames,
-                        transcription: text
-                    )
+                    do {
+                        try self.conversationStorage.saveConversation(
+                            audioFrames: audioFrames,
+                            transcription: text
+                        )
+                    } catch {
+                        print("❌ Failed to archive voice conversation note: \(error)")
+                    }
                     self.historyWindowController.appendTranscription("🧠 [Vault Memo] " + text)
                 }
 
