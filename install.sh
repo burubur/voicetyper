@@ -79,7 +79,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ] && grep -q '"VoiceTyper"' "${REPO_ROOT}/Package.swift"; then
     echo -e "✦ Building VoiceTyper from local source (${REPO_ROOT})..."
     if [ -f "${REPO_ROOT}/Resources/Info.plist" ]; then
-        (cd "${REPO_ROOT}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist)
+        (cd "${REPO_ROOT}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "${REPO_ROOT}/Resources/Info.plist")
     else
         (cd "${REPO_ROOT}" && swift build -c release)
     fi
@@ -90,7 +90,7 @@ else
     trap 'rm -rf "${TMP_DIR}"' EXIT
     git clone https://github.com/burubur/voicetyper.git "${TMP_DIR}"
     if [ -f "${TMP_DIR}/Resources/Info.plist" ]; then
-        (cd "${TMP_DIR}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist)
+        (cd "${TMP_DIR}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "${TMP_DIR}/Resources/Info.plist")
     else
         (cd "${TMP_DIR}" && swift build -c release)
     fi

@@ -42,7 +42,7 @@ build:
 
 compile:
 	@if [ -f "Resources/Info.plist" ]; then \
-		swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist; \
+		swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$$(pwd)/Resources/Info.plist"; \
 	else \
 		swift build -c release; \
 	fi
