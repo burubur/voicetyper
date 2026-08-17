@@ -14,7 +14,7 @@ BLUE='\033[34m'
 YELLOW='\033[33m'
 RESET='\033[0m'
 
-INSTALL_DIR="${PREFIX:-/usr/local/bin}"
+INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 VOICETYPER_HOME="${VOICETYPER_HOME:-$HOME/.voicetyper}"
 BINARY_PATH="$INSTALL_DIR/voicetyper"
 PURGE=false
@@ -52,7 +52,7 @@ if [ "$YES" != true ]; then
     fi
 fi
 
-echo -e "\n${BOLD}${CYAN}Uninstalling VoiceTyper (${BINARY_PATH})...${RESET}\n"
+echo -e "\n${BOLD}${CYAN}Uninstalling VoiceTyper...${RESET}\n"
 
 # 1. Stop Running Instances
 echo "🛑 Stopping running instances..."
@@ -60,16 +60,24 @@ pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
 
 # 2. Remove Binary
-if [ -f "$BINARY_PATH" ]; then
-    echo "Removing binary from $BINARY_PATH..."
-    if [ ! -w "$INSTALL_DIR" ]; then
-        sudo rm -f "$BINARY_PATH"
-    else
-        rm -f "$BINARY_PATH"
+REMOVED=false
+for bin_path in "$BINARY_PATH" "$HOME/.local/bin/voicetyper" "/usr/local/bin/voicetyper"; do
+    if [ -f "$bin_path" ]; then
+        if [ -w "$(dirname "$bin_path")" ] || [ -w "$bin_path" ]; then
+            rm -f "$bin_path" 2>/dev/null || true
+            echo -e "${GREEN}✔ Removed binary from ${bin_path}${RESET}"
+            REMOVED=true
+        else
+            echo "Removing binary from $bin_path..."
+            sudo rm -f "$bin_path" 2>/dev/null || true
+            echo -e "${GREEN}✔ Removed binary from ${bin_path}${RESET}"
+            REMOVED=true
+        fi
     fi
-    echo -e "${GREEN}✔ Removed binary from ${BINARY_PATH}${RESET}"
-else
-    echo -e "${YELLOW}ℹ Binary ${BINARY_PATH} not found.${RESET}"
+done
+
+if [ "$REMOVED" = false ]; then
+    echo -e "${YELLOW}ℹ Binary not found.${RESET}"
 fi
 
 # 3. Optional Data Purge

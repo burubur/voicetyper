@@ -62,10 +62,10 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 # 3. Determine Installation Path
-PREFIX="${PREFIX:-/usr/local/bin}"
+PREFIX="${PREFIX:-$HOME/.local/bin}"
 VOICETYPER_HOME="${VOICETYPER_HOME:-$HOME/.voicetyper}"
 
-mkdir -p "${PREFIX}" 2>/dev/null || true
+mkdir -p "${PREFIX}"
 mkdir -p "${VOICETYPER_HOME}"
 
 echo -e "Detected OS: ${BOLD}${OS}${RESET} | Arch: ${BOLD}${ARCH}${RESET}"
@@ -91,14 +91,11 @@ fi
 
 # 5. Install Binary
 echo -e "📦 Installing binary to ${PREFIX}/voicetyper..."
-if [ ! -w "${PREFIX}" ]; then
-    echo "Administrator privileges required to copy to ${PREFIX}"
-    sudo cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
-    sudo chmod +x "${PREFIX}/voicetyper"
-else
-    cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
-    chmod +x "${PREFIX}/voicetyper"
+if [ -f "${PREFIX}/voicetyper" ]; then
+    rm -f "${PREFIX}/voicetyper" 2>/dev/null || true
 fi
+cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
+chmod +x "${PREFIX}/voicetyper"
 
 if command -v codesign >/dev/null 2>&1; then
     if [ -f "${REPO_ROOT}/Resources/VoiceTyper.entitlements" ]; then

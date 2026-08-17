@@ -97,22 +97,25 @@ public final class UpgradeManager: Sendable {
     }
 
     /// Resolves the installed binary destination path.
+    /// Prefers ~/.local/bin/voicetyper (user-owned, zero sudo/password required).
     public static func determineInstallPath() -> String {
-        let defaultPath = "/usr/local/bin/voicetyper"
+        let localDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin")
+        let localPath = localDir.appendingPathComponent("voicetyper").path
+
         let execPath = CommandLine.arguments[0]
         let execURL = URL(fileURLWithPath: execPath).resolvingSymlinksInPath()
+
+        // If currently running from an installed binary in a user-writable path:
         if FileManager.default.fileExists(atPath: execURL.path) && !execURL.path.contains(".build") {
-            return execURL.path
+            let parentDir = (execURL.path as NSString).deletingLastPathComponent
+            if FileManager.default.isWritableFile(atPath: parentDir) {
+                return execURL.path
+            }
         }
-        if FileManager.default.fileExists(atPath: defaultPath) {
-            return defaultPath
-        }
-        let localPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/bin/voicetyper").path
-        if FileManager.default.fileExists(atPath: localPath) {
-            return localPath
-        }
-        return defaultPath
+
+        // Default to ~/.local/bin/voicetyper
+        try? FileManager.default.createDirectory(at: localDir, withIntermediateDirectories: true)
+        return localPath
     }
 
     /// Executes the self-upgrade sequence.
@@ -212,41 +215,18 @@ public final class UpgradeManager: Sendable {
 
         Swift.print("📦 Installing binary to \(installPath)...")
         let installDir = (installPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(at: URL(fileURLWithPath: installDir), withIntermediateDirectories: true)
 
-        if FileManager.default.isWritableFile(atPath: installDir) || FileManager.default.isWritableFile(atPath: installPath) {
-            do {
-                if FileManager.default.fileExists(atPath: installPath) {
-                    try FileManager.default.removeItem(atPath: installPath)
-                }
-                try FileManager.default.copyItem(atPath: builtBin, toPath: installPath)
-                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installPath)
-                Swift.print("✓ Replaced binary at \(installPath)")
-            } catch {
-                Swift.print("❌ Failed to copy binary: \(error)")
-                exit(1)
+        do {
+            if FileManager.default.fileExists(atPath: installPath) {
+                try FileManager.default.removeItem(atPath: installPath)
             }
-        } else {
-            Swift.print("🔑 Administrator privileges required to copy to \(installPath)...")
-            let sudoCp = Process()
-            sudoCp.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-            sudoCp.arguments = ["cp", builtBin, installPath]
-            do {
-                try sudoCp.run()
-                sudoCp.waitUntilExit()
-                guard sudoCp.terminationStatus == 0 else {
-                    Swift.print("❌ Sudo copy failed.")
-                    exit(1)
-                }
-                let sudoChmod = Process()
-                sudoChmod.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-                sudoChmod.arguments = ["chmod", "+x", installPath]
-                try sudoChmod.run()
-                sudoChmod.waitUntilExit()
-                Swift.print("✓ Replaced binary at \(installPath) (via sudo)")
-            } catch {
-                Swift.print("❌ Sudo process error: \(error)")
-                exit(1)
-            }
+            try FileManager.default.copyItem(atPath: builtBin, toPath: installPath)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installPath)
+            Swift.print("✓ Replaced binary at \(installPath)")
+        } catch {
+            Swift.print("❌ Failed to copy binary to \(installPath): \(error.localizedDescription)")
+            exit(1)
         }
 
         // Ad-hoc code signing for macOS microphone TCC permissions
