@@ -212,68 +212,6 @@ final class App: NSObject, NSApplicationDelegate {
         switchModel(filename: filename)
     }
 
-    private func setupHistoryWindow() {
-        historyWindowController.onMicPressed = { [weak self] in
-            guard let self else { return }
-            self.showHistoryWindow()
-            print("🎙️ Right Option and hold to record.")
-        }
-
-        historyWindowController.onSettingsPressed = { [weak self] view in
-            guard let self else { return }
-            self.showModelMenu(anchoredAt: view)
-        }
-    }
-
-    func showModelMenu(anchoredAt view: NSView) {
-        let menu = NSMenu()
-        let currentModel = WhisperTranscriber.configuredModelFilename
-
-        let headerItem = NSMenuItem(title: "Select Speech Model", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        menu.addItem(headerItem)
-        menu.addItem(NSMenuItem.separator())
-
-        for option in WhisperTranscriber.availableModels {
-            let isCurrent = option.filename.lowercased() == currentModel.lowercased()
-            let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
-            let isDownloading = downloadingModels.contains(option.filename)
-
-            let statusSuffix: String
-            if isDownloading {
-                statusSuffix = " (Downloading...)"
-            } else if isDownloaded {
-                statusSuffix = ""
-            } else {
-                statusSuffix = " (Download needed)"
-            }
-            let itemTitle = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
-
-            let item = NSMenuItem(title: itemTitle, action: #selector(modelSubmenuItemClicked(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = option.filename
-            item.state = isCurrent ? .on : .off
-            if isDownloading {
-                item.isEnabled = false
-            }
-            menu.addItem(item)
-        }
-
-        menu.addItem(NSMenuItem.separator())
-        let openFolderItem = NSMenuItem(title: "Open Model Directory (~/.voicetyper)", action: #selector(openModelFolder), keyEquivalent: "")
-        openFolderItem.target = self
-        menu.addItem(openFolderItem)
-
-        let location = NSPoint(x: 0, y: view.bounds.height + 4)
-        menu.popUp(positioning: nil, at: location, in: view)
-    }
-
-    @objc private func openModelFolder() {
-        let dir = WhisperTranscriber.defaultModelDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
-    }
-
     private func loadModel() {
         if let modelURL = WhisperTranscriber.resolveModelURL().1 {
             finishLoadingModel(url: modelURL)
@@ -639,7 +577,18 @@ final class App: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
 
+        menu.addItem(NSMenuItem.separator())
+        let openFolderItem = NSMenuItem(title: "Open Model Directory (~/.voicetyper)", action: #selector(openModelFolder), keyEquivalent: "")
+        openFolderItem.target = self
+        menu.addItem(openFolderItem)
+
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
+    }
+
+    @objc private func openModelFolder() {
+        let dir = WhisperTranscriber.defaultModelDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
     }
 
     @objc private func modelMenuItemClicked(_ sender: NSMenuItem) {
