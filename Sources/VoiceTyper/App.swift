@@ -24,9 +24,38 @@ final class App: NSObject, NSApplicationDelegate {
     /// Models currently being downloaded in the background.
     private var downloadingModels: Set<String> = []
 
+    public enum ActiveMode: String, CaseIterable {
+        case smartDual = "smart_dual"
+        case directOnly = "direct_only"
+        case conversationOnly = "conversation_only"
+
+        var displayName: String {
+            switch self {
+            case .smartDual:
+                return "Smart Dual (Right Option: Dictate | Shift+Option: Memo)"
+            case .directOnly:
+                return "Direct Dictation Only (Type at Cursor)"
+            case .conversationOnly:
+                return "Conversation Capture Only (Save Audio & Text)"
+            }
+        }
+    }
+
+    private var activeMode: ActiveMode {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "voicetyper_active_mode") ?? ActiveMode.smartDual.rawValue
+            return ActiveMode(rawValue: raw) ?? .smartDual
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "voicetyper_active_mode")
+            rebuildMenuBar()
+        }
+    }
+
     // MARK: - App Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        enforceSingleInstance()
         requestPermissions()
         setupMenuBar()
         setupHistoryWindow()
@@ -54,6 +83,22 @@ final class App: NSObject, NSApplicationDelegate {
 
     // MARK: - Setup
 
+    private func enforceSingleInstance() {
+        let pidFile = UpgradeManager.voicetyperHome.appendingPathComponent("voicetyper.pid")
+        try? FileManager.default.createDirectory(at: UpgradeManager.voicetyperHome, withIntermediateDirectories: true)
+        
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        if let oldPIDString = try? String(contentsOf: pidFile, encoding: .utf8),
+           let oldPID = Int32(oldPIDString.trimmingCharacters(in: .whitespacesAndNewlines)),
+           oldPID != currentPID {
+            // Terminate previous duplicate process
+            kill(oldPID, SIGTERM)
+            print("🛑 Terminated previous duplicate VoiceTyper instance (PID: \(oldPID))")
+        }
+        
+        try? "\(currentPID)".write(to: pidFile, atomically: true, encoding: .utf8)
+    }
+
     private func requestPermissions() {
         // Microphone permission
         AVCaptureDevice.requestAccess(for: .audio) { granted in
@@ -65,7 +110,6 @@ final class App: NSObject, NSApplicationDelegate {
         }
 
         // Accessibility permission (needed for CGEvent tap + keyboard simulation)
-        // Hardcoding the string equivalent of `kAXTrustedCheckOptionPrompt` avoids concurrency warnings
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         if trusted {
@@ -90,14 +134,30 @@ final class App: NSObject, NSApplicationDelegate {
 
         var headerTitle = "VoiceTyper (\(modelTitle))"
         if !downloadingModels.isEmpty {
-            headerTitle += " — Downloading model..."
+            headerTitle += " — Downloading..."
         }
 
         let titleItem = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Show VoiceTyper", action: #selector(showHistoryWindow), keyEquivalent: ""))
+
+        // Active Mode Selection Section
+        let modeHeader = NSMenuItem(title: "Capture Mode:", action: nil, keyEquivalent: "")
+        modeHeader.isEnabled = false
+        menu.addItem(modeHeader)
+
+        for mode in ActiveMode.allCases {
+            let item = NSMenuItem(title: "  " + mode.displayName, action: #selector(modeMenuItemClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = (mode == activeMode) ? .on : .off
+            menu.addItem(item)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Show VoiceTyper Window", action: #selector(showHistoryWindow), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Open Conversations in Finder...", action: #selector(openConversationsFolder), keyEquivalent: ""))
 
         // Model selection submenu
         let modelSubmenu = NSMenu(title: "Select Model")
@@ -133,6 +193,18 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    @objc private func modeMenuItemClicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = ActiveMode(rawValue: raw) else { return }
+        self.activeMode = mode
+    }
+
+    @objc private func openConversationsFolder() {
+        let dir = VoiceConversationStorage.defaultBaseDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
     }
 
     @objc private func modelSubmenuItemClicked(_ sender: NSMenuItem) {
@@ -505,12 +577,83 @@ final class App: NSObject, NSApplicationDelegate {
             self.statusItem.button?.title = ""
         }
     }
+    private func effectiveMode(from detected: DictationMode) -> DictationMode {
+        switch activeMode {
+        case .smartDual:
+            return detected
+        case .directOnly:
+            return .standard
+        case .conversationOnly:
+            return .memoryVault
+        }
+    }
+
+    private func setupHistoryWindow() {
+        historyWindowController.onMicPressed = { [weak self] requestedMode in
+            guard let self else { return }
+            let mode = self.effectiveMode(from: requestedMode ?? .standard)
+            if self.audioRecorder.isRecording {
+                self.keyboardListenerDidStopRecording(mode: mode)
+            } else {
+                self.keyboardListenerDidStartRecording(mode: mode)
+            }
+        }
+
+        historyWindowController.onSettingsPressed = { [weak self] view in
+            guard let self else { return }
+            self.showModelMenu(anchoredAt: view)
+        }
+    }
+
+    func showModelMenu(anchoredAt view: NSView) {
+        let menu = NSMenu()
+        let currentModel = WhisperTranscriber.configuredModelFilename
+
+        let headerItem = NSMenuItem(title: "Select Speech Model", action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        menu.addItem(NSMenuItem.separator())
+
+        for option in WhisperTranscriber.availableModels {
+            let isCurrent = option.filename.lowercased() == currentModel.lowercased()
+            let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
+            let isDownloading = downloadingModels.contains(option.filename)
+
+            let statusSuffix: String
+            if isDownloading {
+                statusSuffix = " (Downloading...)"
+            } else if isDownloaded {
+                statusSuffix = ""
+            } else {
+                statusSuffix = " (Download needed)"
+            }
+            let itemTitle = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
+
+            let item = NSMenuItem(title: itemTitle, action: #selector(modelMenuItemClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.filename
+            item.state = isCurrent ? .on : .off
+            if isDownloading {
+                item.isEnabled = false
+            }
+            menu.addItem(item)
+        }
+
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
+    }
+
+    @objc private func modelMenuItemClicked(_ sender: NSMenuItem) {
+        guard let filename = sender.representedObject as? String else { return }
+        switchModel(filename: filename)
+    }
 }
 
 // MARK: - KeyboardListenerDelegate
 
 extension App: KeyboardListenerDelegate {
-    func keyboardListenerDidStartRecording(mode: DictationMode) {
+    func keyboardListenerDidStartRecording(mode detectedMode: DictationMode) {
+        let mode = effectiveMode(from: detectedMode)
+
         guard transcriber != nil else {
             keyboardListener.forceAbort()
             NSApp.activate(ignoringOtherApps: true)
@@ -523,16 +666,16 @@ extension App: KeyboardListenerDelegate {
         }
         
         abortRequested = false
-        updateIcon(symbol: (mode == .memoryVault) ? "brain.head.profile" : "mic.fill")
+        updateIcon(symbol: (mode == .memoryVault) ? "waveform.and.mic" : "waveform.circle")
         historyWindowController.setRecording(true)
         FloatingRecordingIndicator.shared.show(mode: mode)
 
         do {
             try audioRecorder.startRecording()
             if mode == .memoryVault {
-                print("🎙️ Recording Voice Memory Note (Shift + Right Option)...")
+                print("🎙️ Recording Voice Conversation Memo (Mode: \(activeMode.rawValue))...")
             } else {
-                print("🎙️ Recording... (speak now)")
+                print("🎙️ Recording Direct Dictation (Mode: \(activeMode.rawValue))...")
             }
         } catch {
             print("❌ Failed to start recording: \(error)")
@@ -540,7 +683,8 @@ extension App: KeyboardListenerDelegate {
         }
     }
 
-    func keyboardListenerDidStopRecording(mode: DictationMode) {
+    func keyboardListenerDidStopRecording(mode detectedMode: DictationMode) {
+        let mode = effectiveMode(from: detectedMode)
         print("⏹️  Recording stopped. Processing (Mode: \(mode))...")
         historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()

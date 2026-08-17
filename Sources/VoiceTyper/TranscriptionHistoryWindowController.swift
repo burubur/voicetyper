@@ -33,7 +33,7 @@ struct RecordedConversationItem: Identifiable, Equatable {
 
 @MainActor
 final class TranscriptionHistoryWindowController: NSWindowController, NSTextFieldDelegate {
-    var onMicPressed: (() -> Void)?
+    var onMicPressed: ((DictationMode?) -> Void)?
     var onClearPressed: (() -> Void)?
     var onSettingsPressed: ((NSView) -> Void)?
 
@@ -419,6 +419,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         let isConversations = (sender.selectedSegment == 1)
         searchPill.isHidden = isConversations
         conversationsHeaderBar.isHidden = !isConversations
+        recordButton.setMode(isConversation: isConversations)
 
         if isConversations {
             loadRecordedConversations()
@@ -772,7 +773,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     @objc private func recordButtonPressed() {
-        onMicPressed?()
+        let mode: DictationMode = (tabSegmentedControl.selectedSegment == 1) ? .memoryVault : .standard
+        onMicPressed?(mode)
     }
 
     @objc private func clearButtonPressed() {
@@ -1213,7 +1215,9 @@ class IconButton: NSButton {
 
 class CircleRecordButton: NSButton {
     private var recording = false
+    private var isConversationMode = false
     private let coralColor = NSColor(red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
+    private let purpleColor = NSColor(red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 1.0)
 
     private let pillView = NSView()
     private let micImageView = NSImageView()
@@ -1281,10 +1285,26 @@ class CircleRecordButton: NSButton {
         refreshColors()
     }
 
+    func setMode(isConversation: Bool) {
+        self.isConversationMode = isConversation
+        updateLabel()
+        refreshColors()
+    }
+
     func setRecording(_ value: Bool) {
         recording = value
-        statusLabel.stringValue = recording ? "Recording..." : "Right Option and hold to record"
+        updateLabel()
         refreshColors()
+    }
+
+    private func updateLabel() {
+        if recording {
+            statusLabel.stringValue = "Recording..."
+        } else if isConversationMode {
+            statusLabel.stringValue = "Shift + Right Option to record memo"
+        } else {
+            statusLabel.stringValue = "Right Option and hold to record"
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1294,13 +1314,14 @@ class CircleRecordButton: NSButton {
 
     func refreshColors() {
         guard let layer = pillView.layer else { return }
+        let activeColor = isConversationMode ? purpleColor : coralColor
 
         if recording {
-            layer.backgroundColor = coralColor.withAlphaComponent(0.85).cgColor
+            layer.backgroundColor = activeColor.withAlphaComponent(0.85).cgColor
 
             let pulse = CABasicAnimation(keyPath: "backgroundColor")
-            pulse.fromValue = coralColor.withAlphaComponent(0.95).cgColor
-            pulse.toValue = coralColor.withAlphaComponent(0.35).cgColor
+            pulse.fromValue = activeColor.withAlphaComponent(0.95).cgColor
+            pulse.toValue = activeColor.withAlphaComponent(0.35).cgColor
             pulse.duration = 0.8
             pulse.autoreverses = true
             pulse.repeatCount = .infinity
@@ -1308,7 +1329,7 @@ class CircleRecordButton: NSButton {
             layer.add(pulse, forKey: "recordingPulse")
         } else {
             layer.removeAnimation(forKey: "recordingPulse")
-            layer.backgroundColor = coralColor.withAlphaComponent(0.85).cgColor
+            layer.backgroundColor = activeColor.withAlphaComponent(0.85).cgColor
         }
     }
 }
