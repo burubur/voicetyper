@@ -41,7 +41,11 @@ build:
 	swift build
 
 compile:
-	swift build -c release
+	@if [ -f "Resources/Info.plist" ]; then \
+		swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist; \
+	else \
+		swift build -c release; \
+	fi
 
 # Runs Swift unit tests
 unit-test:

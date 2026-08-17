@@ -78,14 +78,22 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 
 if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ] && grep -q '"VoiceTyper"' "${REPO_ROOT}/Package.swift"; then
     echo -e "✦ Building VoiceTyper from local source (${REPO_ROOT})..."
-    (cd "${REPO_ROOT}" && swift build -c release)
+    if [ -f "${REPO_ROOT}/Resources/Info.plist" ]; then
+        (cd "${REPO_ROOT}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist)
+    else
+        (cd "${REPO_ROOT}" && swift build -c release)
+    fi
     BUILD_BIN="${REPO_ROOT}/.build/release/VoiceTyper"
 else
     echo -e "✦ Cloning and building VoiceTyper from https://github.com/burubur/voicetyper..."
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "${TMP_DIR}"' EXIT
     git clone https://github.com/burubur/voicetyper.git "${TMP_DIR}"
-    (cd "${TMP_DIR}" && swift build -c release)
+    if [ -f "${TMP_DIR}/Resources/Info.plist" ]; then
+        (cd "${TMP_DIR}" && swift build -c release -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Resources/Info.plist)
+    else
+        (cd "${TMP_DIR}" && swift build -c release)
+    fi
     BUILD_BIN="${TMP_DIR}/.build/release/VoiceTyper"
 fi
 

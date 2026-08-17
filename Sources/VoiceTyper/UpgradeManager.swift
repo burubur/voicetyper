@@ -189,7 +189,12 @@ public final class UpgradeManager: Sendable {
         Swift.print("✦ Compiling VoiceTyper in release mode...")
         let buildProcess = Process()
         buildProcess.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
-        buildProcess.arguments = ["build", "-c", "release"]
+        var buildArgs = ["build", "-c", "release"]
+        let infoPlistPath = URL(fileURLWithPath: validSourceDir).appendingPathComponent("Resources/Info.plist").path
+        if FileManager.default.fileExists(atPath: infoPlistPath) {
+            buildArgs.append(contentsOf: ["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", infoPlistPath])
+        }
+        buildProcess.arguments = buildArgs
         buildProcess.currentDirectoryURL = URL(fileURLWithPath: validSourceDir)
 
         do {

@@ -19,15 +19,7 @@ let package = Package(
                 .product(name: "SwiftWhisper", package: "SwiftWhisper"),
                 .product(name: "sherpa-onnx", package: "sherpa-onnx")
             ],
-            path: "Sources/VoiceTyper",
-            linkerSettings: [
-                .unsafeFlags([
-                    "-Xlinker", "-sectcreate",
-                    "-Xlinker", "__TEXT",
-                    "-Xlinker", "__info_plist",
-                    "-Xlinker", "Resources/Info.plist"
-                ])
-            ]
+            path: "Sources/VoiceTyper"
         ),
         .testTarget(
             name: "VoiceTyperTests",
