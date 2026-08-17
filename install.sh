@@ -102,7 +102,12 @@ fi
 
 echo "✓ Binary installed into ${PREFIX}/voicetyper"
 
-# 6. Shell PATH Configuration
+# 6. Record source repo cache for omnipresent voicetyper upgrade
+if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ]; then
+    echo "${REPO_ROOT}" > "${VOICETYPER_HOME}/source_repo"
+fi
+
+# 7. Shell PATH Configuration
 SHELL_CONFIG=""
 if [ -f "$HOME/.zshrc" ]; then
     SHELL_CONFIG="$HOME/.zshrc"
@@ -119,7 +124,7 @@ if [ -n "${SHELL_CONFIG}" ]; then
     fi
 fi
 
-# 7. Restart Application
+# 8. Restart Application
 echo "🚀 Starting VoiceTyper in the background..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
@@ -131,7 +136,10 @@ echo -e "${GREEN}${BOLD}✓ VoiceTyper successfully installed to ${PREFIX}/voice
 echo "  Configuration and logs stored in ${VOICETYPER_HOME}/"
 echo
 echo -e "${BOLD}Next steps:${RESET}"
-echo -e "  • VoiceTyper is now running in your menu bar (microphone icon)."
-echo -e "  • Press and hold ${CYAN}fn${RESET} (or ${CYAN}Globe${RESET}) key to dictate text anywhere."
-echo -e "  • For debug logging: ${GREEN}voicetyper --debug${RESET}"
+echo -e "  • Menu Bar Agent:  Running in your menu bar (microphone icon)."
+echo -e "  • Dictate Text:    Press and hold ${CYAN}Right Option${RESET} key to dictate anywhere."
+echo -e "  • Voice Memo:      Press and hold ${CYAN}Shift + Right Option${RESET} to save voice memo."
+echo -e "  • Check Status:    ${GREEN}voicetyper status${RESET}"
+echo -e "  • Self-Upgrade:    ${GREEN}voicetyper upgrade${RESET}"
+echo -e "  • Debug Logging:   ${GREEN}voicetyper --debug${RESET}"
 echo
