@@ -1,68 +1,137 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# VoiceTyper App & CLI (`voicetyper`) — Installer Script for macOS
+#
+# Quick Install for Friends / Developers:
+#   curl -sSf https://raw.githubusercontent.com/burubur/voicetyper/main/install.sh | sh
+#
+# Repository:
+#   https://github.com/burubur/voicetyper
+# ==============================================================================
+
 set -euo pipefail
 
+BOLD='\033[1m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+BLUE='\033[34m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+echo -ne "${BOLD}${CYAN}"
 echo " __      __  _           _______                     "
-echo " \\ \\    / / (_)         |__   __|                    "
-echo "  \\ \\  / /__ _  ___ ___    | |_   _ _ __   ___ _ __ "
-echo "   \\ \\/ / _ \\ |/ __/ _ \\   | | | | | '_ \\ / _ \\ '__|"
-echo "    \\  / (_) | | (_|  __/   | | |_| | |_) |  __/ |   "
-echo "     \\/ \\___/|_|\\___\\___|   |_|\\__, | .__/ \\___|_|   "
+echo " \ \    / / (_)         |__   __|                    "
+echo "  \ \  / /__ _  ___ ___    | |_   _ _ __   ___ _ __ "
+echo "   \ \/ / _ \ |/ __/ _ \   | | | | | '_ \ / _ \ '__|"
+echo "    \  / (_) | | (_|  __/   | | |_| | |_) |  __/ |   "
+echo "     \/ \___/|_|\___\___|   |_|\__, | .__/ \___|_|   "
 echo "                                __/ | |              "
 echo "                               |___/|_|              "
-echo "================================================================="
-echo "🎙️ Installing Swift VoiceTyper..."
-echo "================================================================="
+echo -e "${RESET}${BOLD}Global Offline Voice Dictation & Transcription for macOS${RESET}"
+echo -e "Repository: ${CYAN}https://github.com/burubur/voicetyper${RESET}\n"
 
-# 1. Check requirements
-if ! command -v swift &> /dev/null; then
+echo "✦ VOICETYPER INSTALLATION"
+echo "───────────────────────────────────────────────────────────────────────────"
+
+# 1. Platform Detection
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+
+if [ "${OS}" != "darwin" ]; then
+    echo -e "${YELLOW}! Warning: VoiceTyper is designed for macOS (Darwin). Detected OS: ${OS}.${RESET}"
+fi
+
+case "${ARCH}" in
+    x86_64|amd64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *)
+        echo -e "${YELLOW}! Warning: Architecture ${ARCH}. Will attempt standard install.${RESET}"
+        ;;
+esac
+
+# 2. Check Requirements
+if ! command -v swift >/dev/null 2>&1; then
     echo "❌ Swift compiler not found."
     echo "Please install Xcode Command Line Tools first by running: xcode-select --install"
     exit 1
 fi
 
-if ! command -v git &> /dev/null; then
+if ! command -v git >/dev/null 2>&1; then
     echo "❌ Git is not installed."
     exit 1
 fi
 
-# 2. Check if running locally or via remote script
-if [ -f "Package.swift" ] && grep -q '"VoiceTyper"' Package.swift; then
-    echo "📂 Running from local project source. Skipping clone."
-else
-    # Prepare temporary directory
-    TMP_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_DIR"' EXIT
+# 3. Determine Installation Path
+PREFIX="${PREFIX:-/usr/local/bin}"
+VOICETYPER_HOME="${VOICETYPER_HOME:-$HOME/.voicetyper}"
 
-    echo "📂 Cloning repository..."
-    # Adjust this URL if your repository is named differently or hosted elsewhere
-    REPO_URL="https://github.com/burubur/voicetyper.git"
-    git clone "$REPO_URL" "$TMP_DIR"
-    cd "$TMP_DIR"
+mkdir -p "${PREFIX}" 2>/dev/null || true
+mkdir -p "${VOICETYPER_HOME}"
+
+echo -e "Detected OS: ${BOLD}${OS}${RESET} | Arch: ${BOLD}${ARCH}${RESET}"
+echo -e "Target Path: ${BOLD}${PREFIX}/voicetyper${RESET}"
+echo -e "Data Path:   ${BOLD}${VOICETYPER_HOME}${RESET}"
+echo "───────────────────────────────────────────────────────────────────────────"
+
+# 4. Build from Source or Clone
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
+
+if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ] && grep -q '"VoiceTyper"' "${REPO_ROOT}/Package.swift"; then
+    echo -e "✦ Building VoiceTyper from local source (${REPO_ROOT})..."
+    (cd "${REPO_ROOT}" && swift build -c release)
+    BUILD_BIN="${REPO_ROOT}/.build/release/VoiceTyper"
+else
+    echo -e "✦ Cloning and building VoiceTyper from https://github.com/burubur/voicetyper..."
+    TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "${TMP_DIR}"' EXIT
+    git clone https://github.com/burubur/voicetyper.git "${TMP_DIR}"
+    (cd "${TMP_DIR}" && swift build -c release)
+    BUILD_BIN="${TMP_DIR}/.build/release/VoiceTyper"
 fi
 
-# 3. Build the binary
-echo "🏗️ Building VoiceTyper in release mode (this may take a few minutes)..."
-swift build -c release
-
-# 4. Install system-wide
-INSTALL_DIR="/usr/local/bin"
-echo "📦 Installing binary to $INSTALL_DIR/voicetyper..."
-
-if [ ! -w "$INSTALL_DIR" ]; then
-    echo "Administrator privileges required to copy to $INSTALL_DIR"
-    sudo cp .build/release/VoiceTyper "$INSTALL_DIR/voicetyper"
+# 5. Install Binary
+echo -e "📦 Installing binary to ${PREFIX}/voicetyper..."
+if [ ! -w "${PREFIX}" ]; then
+    echo "Administrator privileges required to copy to ${PREFIX}"
+    sudo cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
+    sudo chmod +x "${PREFIX}/voicetyper"
 else
-    cp .build/release/VoiceTyper "$INSTALL_DIR/voicetyper"
+    cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
+    chmod +x "${PREFIX}/voicetyper"
 fi
 
-echo ""
-echo "✅ VoiceTyper installed successfully!"
+echo "✓ Binary installed into ${PREFIX}/voicetyper"
 
+# 6. Shell PATH Configuration
+SHELL_CONFIG=""
+if [ -f "$HOME/.zshrc" ]; then
+    SHELL_CONFIG="$HOME/.zshrc"
+elif [ -f "$HOME/.bashrc" ]; then
+    SHELL_CONFIG="$HOME/.bashrc"
+elif [ -f "$HOME/.profile" ]; then
+    SHELL_CONFIG="$HOME/.profile"
+fi
+
+if [ -n "${SHELL_CONFIG}" ]; then
+    if ! grep -q "${PREFIX}" "${SHELL_CONFIG}"; then
+        echo "export PATH=\"${PREFIX}:\$PATH\"" >> "${SHELL_CONFIG}"
+        echo -e "✓ Added ${PREFIX} to ${SHELL_CONFIG}"
+    fi
+fi
+
+# 7. Restart Application
 echo "🚀 Starting VoiceTyper in the background..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
-mkdir -p "$HOME/.voicetyper"
-nohup "$INSTALL_DIR/voicetyper" > "$HOME/.voicetyper/app.log" 2>&1 &
 
-echo "It is now running in your menu bar (simple mic icon)."
-echo "To see diagnostic logs, you can stop it and run it manually in a custom terminal: voicetyper --debug"
+nohup "${PREFIX}/voicetyper" > "${VOICETYPER_HOME}/app.log" 2>&1 &
+
+echo "───────────────────────────────────────────────────────────────────────────"
+echo -e "${GREEN}${BOLD}✓ VoiceTyper successfully installed to ${PREFIX}/voicetyper${RESET}"
+echo "  Configuration and logs stored in ${VOICETYPER_HOME}/"
+echo
+echo -e "${BOLD}Next steps:${RESET}"
+echo -e "  • VoiceTyper is now running in your menu bar (microphone icon)."
+echo -e "  • Press and hold ${CYAN}fn${RESET} (or ${CYAN}Globe${RESET}) key to dictate text anywhere."
+echo -e "  • For debug logging: ${GREEN}voicetyper --debug${RESET}"
+echo
