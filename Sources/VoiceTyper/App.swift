@@ -367,31 +367,34 @@ final class App: NSObject, NSApplicationDelegate {
     private func processRecording(mode: DictationMode = .standard) {
         let audioFrames = audioRecorder.stopRecording()
 
-        // Reject too-short recordings (~< 0.3 seconds)
+        // Reject too-short recordings (~< 0.4 seconds)
         guard audioFrames.count >= AudioRecorder.minimumFrameCount else {
-            print("🔕 Recording too short, ignoring.")
+            print("🔕 Recording too short (\(audioFrames.count) frames), ignoring.")
             updateIcon(symbol: "mic")
             return
         }
 
-        // Calculate peak amplitude to detect absolute silence (e.g. mic permission denied)
+        // Calculate peak amplitude & RMS energy to detect silence/empty audio
         var maxAmplitude: Float = 0
+        var sumSquares: Float = 0
         for sample in audioFrames {
             let absSample = abs(sample)
             if absSample > maxAmplitude {
                 maxAmplitude = absSample
             }
+            sumSquares += sample * sample
         }
+        let rms = sqrt(sumSquares / Float(max(1, audioFrames.count)))
         
-        // If amplitude is basically zero, skip transcription to prevent Whisper hallucinations
-        guard maxAmplitude > 0.005 else {
-            print("🔕 Audio is silent (max amp: \(maxAmplitude)). Skipping to prevent hallucination.")
+        // If amplitude or RMS energy is essentially zero, skip to prevent saving blank files
+        guard maxAmplitude > 0.012 && rms > 0.003 else {
+            print("🔕 Audio is silent (max amp: \(maxAmplitude), rms: \(rms)). Discarded without saving.")
             updateIcon(symbol: "mic")
             return
         }
 
         updateIcon(symbol: (mode == .memoryVault) ? "brain.fill" : "waveform.circle")
-        print("🧠 Transcribing \(audioFrames.count) frames locally (Mode: \(mode))...")
+        print("🧠 Transcribing \(audioFrames.count) frames locally (Mode: \(mode), amp: \(maxAmplitude))...")
 
         // Run transcription; task inherits MainActor but await will yield
         let abortFlag = abortRequested
@@ -428,8 +431,9 @@ final class App: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                if text.isEmpty {
-                    print("🔕 Silence detected, nothing to type.")
+                // Check if the transcription contains actual meaningful speech
+                guard self.isMeaningfulSpeech(text: text, audioFrames: audioFrames) else {
+                    print("🔕 Silence or empty speech detected ('\(text)'). Discarded without saving.")
                     self.updateIcon(symbol: "mic")
                     return
                 }
@@ -463,6 +467,33 @@ final class App: NSObject, NSApplicationDelegate {
                 self.updateIcon(symbol: "mic")
             }
         }
+    }
+
+    /// Validates whether transcribed text and audio frames represent meaningful speech rather than silence/artifacts.
+    private func isMeaningfulSpeech(text: String, audioFrames: [Float]) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return false
+        }
+
+        // Must contain at least 2 alphanumeric characters
+        let alphanumericCount = trimmed.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.count
+        if alphanumericCount < 2 {
+            return false
+        }
+
+        // Filter common Whisper silence hallucination patterns
+        let lower = trimmed.lowercased()
+        let silenceHallucinations: Set<String> = [
+            "[music]", "[silence]", "(music)", "(silence)", "[applause]", "[blank_audio]",
+            "thank you.", "thank you", "thanks for watching!", "thanks for watching.",
+            "subtitles by", "subtitles by the amara.org community", "you", "bye.", "bye!"
+        ]
+        if silenceHallucinations.contains(lower) {
+            return false
+        }
+
+        return true
     }
 
     // MARK: - Helpers
