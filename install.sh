@@ -94,6 +94,10 @@ echo -e "📦 Installing binary to ${PREFIX}/voicetyper..."
 if [ -f "${PREFIX}/voicetyper" ]; then
     rm -f "${PREFIX}/voicetyper" 2>/dev/null || true
 fi
+# Remove stale /usr/local/bin/voicetyper if present to prevent PATH conflicts
+if [ "${PREFIX}" != "/usr/local/bin" ] && [ -f "/usr/local/bin/voicetyper" ]; then
+    rm -f "/usr/local/bin/voicetyper" 2>/dev/null || true
+fi
 cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
 chmod +x "${PREFIX}/voicetyper"
 

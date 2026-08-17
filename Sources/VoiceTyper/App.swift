@@ -151,8 +151,6 @@ final class App: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.showModelMenu(anchoredAt: view)
         }
-
-        historyWindowController.showWindow(nil)
     }
 
     func showModelMenu(anchoredAt view: NSView) {

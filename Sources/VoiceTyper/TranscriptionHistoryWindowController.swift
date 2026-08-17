@@ -15,6 +15,20 @@ struct TranscriptionHistoryItem: Codable, Identifiable, Equatable {
     }
 }
 
+// MARK: - RecordedConversationItem
+
+struct RecordedConversationItem: Identifiable, Equatable {
+    let id: String
+    let filename: String
+    let dateFormatted: String
+    let timeFormatted: String
+    let wavURL: URL
+    let txtURL: URL?
+    let transcriptPreview: String
+    let createdAt: Date
+    let fileSizeString: String
+}
+
 // MARK: - TranscriptionHistoryWindowController
 
 @MainActor
@@ -25,11 +39,41 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
     private var items: [TranscriptionHistoryItem] = []
     private var filteredItems: [TranscriptionHistoryItem] = []
+    private var recordedConversations: [RecordedConversationItem] = []
     private var isRecording = false
 
     private let contentView = ThemeAwareView()
+    private let tabSegmentedControl: NSSegmentedControl = {
+        let sc = NSSegmentedControl(labels: ["Transcriptions", "Conversations"], trackingMode: .selectOne, target: nil, action: nil)
+        sc.selectedSegment = 0
+        sc.segmentStyle = .texturedRounded
+        sc.translatesAutoresizingMaskIntoConstraints = false
+        sc.font = .systemFont(ofSize: 12, weight: .medium)
+        return sc
+    }()
+
     private let searchField = NSTextField()
     private let searchPill = NSView()
+
+    private let conversationsHeaderBar: NSStackView = {
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.distribution = .fill
+        stack.spacing = 8
+        stack.isHidden = true
+        return stack
+    }()
+
+    private let conversationsPathLabel: NSTextField = {
+        let lbl = NSTextField(labelWithString: "~/.voicetyper/conversation")
+        lbl.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        lbl.textColor = Palette.secondaryText
+        lbl.lineBreakMode = .byTruncatingHead
+        return lbl
+    }()
+
     private let scrollView = NSScrollView()
     private let cardsStack = NSStackView()
     private let recordButton = CircleRecordButton()
@@ -103,7 +147,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 660),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -113,7 +157,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.backgroundColor = Palette.windowBackground
-        window.minSize = NSSize(width: 400, height: 520)
+        window.minSize = NSSize(width: 420, height: 540)
         window.center()
 
         super.init(window: window)
@@ -131,56 +175,57 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         super.showWindow(sender)
         window?.makeKeyAndOrderFront(sender)
         NSApp.activate(ignoringOtherApps: true)
+        if tabSegmentedControl.selectedSegment == 1 {
+            loadRecordedConversations()
+            renderCards()
+        }
     }
 
     func appendTranscription(_ text: String, createdAt: Date = Date()) {
         let item = TranscriptionHistoryItem(text: text, createdAt: createdAt)
         items.insert(item, at: 0)
         saveHistory()
-        
-        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty || text.localizedCaseInsensitiveContains(query) {
-            filteredItems.insert(item, at: 0)
-            
-            let card = TranscriptionCardView(
-                item: item,
-                date: dateFormatter.string(from: item.createdAt),
-                time: timeFormatter.string(from: item.createdAt),
-                onCopy: { text in
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                },
-                onDelete: { [weak self] id in
-                    self?.deleteTranscription(id: id)
-                }
-            )
-            card.translatesAutoresizingMaskIntoConstraints = false
-            card.alphaValue = 0.0
-            
-            let heightConstraint = card.heightAnchor.constraint(equalToConstant: 0)
-            
-            cardsStack.insertArrangedSubview(card, at: 0)
-            
-            NSLayoutConstraint.activate([
-                card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
-                heightConstraint
-            ])
-            
-            // Set the new constraint
-            heightConstraint.isActive = false
-            let minHeight = card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
-            minHeight.isActive = true
-            
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.4
-                context.allowsImplicitAnimation = true
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+        if tabSegmentedControl.selectedSegment == 0 {
+            let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if query.isEmpty || text.localizedCaseInsensitiveContains(query) {
+                filteredItems.insert(item, at: 0)
                 
-                card.animator().alphaValue = 1.0
-                self.cardsStack.superview?.layoutSubtreeIfNeeded()
-            })
-            
-            emptyStateStack.isHidden = true
+                let card = TranscriptionCardView(
+                    item: item,
+                    date: dateFormatter.string(from: item.createdAt),
+                    time: timeFormatter.string(from: item.createdAt),
+                    onCopy: { text in
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    },
+                    onDelete: { [weak self] id in
+                        self?.deleteTranscription(id: id)
+                    }
+                )
+                card.translatesAutoresizingMaskIntoConstraints = false
+                card.alphaValue = 0.0
+                
+                cardsStack.insertArrangedSubview(card, at: 0)
+                
+                NSLayoutConstraint.activate([
+                    card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+                ])
+                
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.4
+                    context.allowsImplicitAnimation = true
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    card.animator().alphaValue = 1.0
+                    self.cardsStack.superview?.layoutSubtreeIfNeeded()
+                })
+                
+                emptyStateStack.isHidden = true
+            }
+        } else {
+            loadRecordedConversations()
+            renderCards()
         }
     }
 
@@ -229,18 +274,22 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     func clearHistory() {
-        let alert = NSAlert()
-        alert.messageText = "Clear History"
-        alert.informativeText = "Are you sure you want to clear all transcription history?"
-        alert.addButton(withTitle: "Clear All")
-        alert.addButton(withTitle: "Cancel")
-        alert.alertStyle = .warning
+        if tabSegmentedControl.selectedSegment == 0 {
+            let alert = NSAlert()
+            alert.messageText = "Clear History"
+            alert.informativeText = "Are you sure you want to clear all transcription history?"
+            alert.addButton(withTitle: "Clear All")
+            alert.addButton(withTitle: "Cancel")
+            alert.alertStyle = .warning
 
-        if alert.runModal() == .alertFirstButtonReturn {
-            items.removeAll()
-            saveHistory()
-            applyFilter()
-            onClearPressed?()
+            if alert.runModal() == .alertFirstButtonReturn {
+                items.removeAll()
+                saveHistory()
+                applyFilter()
+                onClearPressed?()
+            }
+        } else {
+            openConversationFolderClicked()
         }
     }
 
@@ -267,6 +316,72 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         }
     }
 
+    // MARK: - Recorded Conversation Loading
+
+    private func loadRecordedConversations() {
+        let baseDir = VoiceConversationStorage.defaultBaseDirectory
+        var results: [RecordedConversationItem] = []
+
+        guard FileManager.default.fileExists(atPath: baseDir.path) else {
+            self.recordedConversations = []
+            return
+        }
+
+        let enumerator = FileManager.default.enumerator(
+            at: baseDir,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        while let fileURL = enumerator?.nextObject() as? URL {
+            if fileURL.pathExtension.lowercased() == "wav" {
+                let filename = fileURL.deletingPathExtension().lastPathComponent
+                let txtURL = fileURL.deletingLastPathComponent().deletingLastPathComponent()
+                    .appendingPathComponent("text")
+                    .appendingPathComponent("\(filename).txt")
+
+                var preview = ""
+                if FileManager.default.fileExists(atPath: txtURL.path),
+                   let textContent = try? String(contentsOf: txtURL, encoding: .utf8) {
+                    preview = textContent.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                var createdAt = Date()
+                var sizeString = "Audio (.wav)"
+                if let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) {
+                    if let modDate = resourceValues.contentModificationDate {
+                        createdAt = modDate
+                    }
+                    if let size = resourceValues.fileSize {
+                        let kb = Double(size) / 1024.0
+                        if kb > 1024 {
+                            sizeString = String(format: "%.1f MB", kb / 1024.0)
+                        } else {
+                            sizeString = String(format: "%.0f KB", kb)
+                        }
+                    }
+                }
+
+                let item = RecordedConversationItem(
+                    id: filename,
+                    filename: filename,
+                    dateFormatted: dateFormatter.string(from: createdAt),
+                    timeFormatted: timeFormatter.string(from: createdAt),
+                    wavURL: fileURL,
+                    txtURL: FileManager.default.fileExists(atPath: txtURL.path) ? txtURL : nil,
+                    transcriptPreview: preview.isEmpty ? "(Voice memo audio recording)" : preview,
+                    createdAt: createdAt,
+                    fileSizeString: sizeString
+                )
+                results.append(item)
+            }
+        }
+
+        // Sort descending by creation date
+        results.sort { $0.createdAt > $1.createdAt }
+        self.recordedConversations = results
+    }
+
     // MARK: - Layout Setup
 
     private func setupContent() {
@@ -278,13 +393,191 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         }
         window.contentView = contentView
 
+        setupTabs()
         setupSearchField()
+        setupConversationsHeader()
         setupBottomBar()
         setupScrollView()
         setupOnboardingOverlay()
         refreshColors()
     }
-    
+
+    private func setupTabs() {
+        tabSegmentedControl.target = self
+        tabSegmentedControl.action = #selector(tabChanged(_:))
+        contentView.addSubview(tabSegmentedControl)
+
+        NSLayoutConstraint.activate([
+            tabSegmentedControl.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 46),
+            tabSegmentedControl.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            tabSegmentedControl.heightAnchor.constraint(equalToConstant: 28),
+            tabSegmentedControl.widthAnchor.constraint(equalToConstant: 240)
+        ])
+    }
+
+    @objc private func tabChanged(_ sender: NSSegmentedControl) {
+        let isConversations = (sender.selectedSegment == 1)
+        searchPill.isHidden = isConversations
+        conversationsHeaderBar.isHidden = !isConversations
+
+        if isConversations {
+            loadRecordedConversations()
+        }
+        renderCards()
+    }
+
+    private func setupSearchField() {
+        searchPill.translatesAutoresizingMaskIntoConstraints = false
+        searchPill.wantsLayer = true
+        searchPill.layer?.cornerRadius = 18
+        searchPill.layer?.borderWidth = 1
+        searchPill.layer?.shadowColor = NSColor.black.cgColor
+        searchPill.layer?.shadowOpacity = 0.08
+        searchPill.layer?.shadowOffset = NSSize(width: 0, height: -2)
+        searchPill.layer?.shadowRadius = 6
+
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.delegate = self
+        searchField.placeholderString = "Search transcriptions..."
+        searchField.font = .systemFont(ofSize: 13, weight: .regular)
+        searchField.focusRingType = .none
+        searchField.drawsBackground = false
+        searchField.isBordered = false
+        searchField.isBezeled = false
+
+        searchPill.addSubview(searchField)
+        contentView.addSubview(searchPill)
+
+        NSLayoutConstraint.activate([
+            searchPill.topAnchor.constraint(equalTo: tabSegmentedControl.bottomAnchor, constant: 14),
+            searchPill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            searchPill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            searchPill.heightAnchor.constraint(equalToConstant: 36),
+
+            searchField.leadingAnchor.constraint(equalTo: searchPill.leadingAnchor, constant: 16),
+            searchField.trailingAnchor.constraint(equalTo: searchPill.trailingAnchor, constant: -16),
+            searchField.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
+        ])
+    }
+
+    private func setupConversationsHeader() {
+        let openFolderBtn = NSButton(title: "Open in Finder", target: self, action: #selector(openConversationFolderClicked))
+        openFolderBtn.bezelStyle = .rounded
+        openFolderBtn.font = .systemFont(ofSize: 11, weight: .medium)
+        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: nil) {
+            folderImg.size = NSSize(width: 14, height: 14)
+            openFolderBtn.image = folderImg
+            openFolderBtn.imagePosition = .imageLeading
+        }
+
+        let refreshBtn = NSButton(title: "", target: self, action: #selector(refreshConversationsClicked))
+        refreshBtn.bezelStyle = .rounded
+        if let refreshImg = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) {
+            refreshImg.size = NSSize(width: 12, height: 12)
+            refreshBtn.image = refreshImg
+            refreshBtn.imagePosition = .imageOnly
+        }
+
+        conversationsHeaderBar.addArrangedSubview(conversationsPathLabel)
+        conversationsHeaderBar.addArrangedSubview(refreshBtn)
+        conversationsHeaderBar.addArrangedSubview(openFolderBtn)
+        contentView.addSubview(conversationsHeaderBar)
+
+        NSLayoutConstraint.activate([
+            conversationsHeaderBar.topAnchor.constraint(equalTo: tabSegmentedControl.bottomAnchor, constant: 14),
+            conversationsHeaderBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            conversationsHeaderBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            conversationsHeaderBar.heightAnchor.constraint(equalToConstant: 36),
+        ])
+    }
+
+    @objc private func openConversationFolderClicked() {
+        let dir = VoiceConversationStorage.defaultBaseDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
+    }
+
+    @objc private func refreshConversationsClicked() {
+        loadRecordedConversations()
+        renderCards()
+    }
+
+    private func setupScrollView() {
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.scrollerStyle = .overlay
+
+        cardsStack.translatesAutoresizingMaskIntoConstraints = false
+        cardsStack.orientation = .vertical
+        cardsStack.alignment = .width
+        cardsStack.spacing = 14
+        cardsStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
+
+        let documentView = FlippedView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(cardsStack)
+        scrollView.documentView = documentView
+
+        emptyStateStack.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(scrollView)
+        contentView.addSubview(emptyStateStack)
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 14),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+
+            cardsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            cardsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            cardsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            cardsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+
+            emptyStateStack.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyStateStack.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+        ])
+    }
+
+    private func setupBottomBar() {
+        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar.wantsLayer = true
+        contentView.addSubview(bottomBar)
+
+        recordButton.translatesAutoresizingMaskIntoConstraints = false
+        recordButton.target = self
+        recordButton.action = #selector(recordButtonPressed)
+
+        let clearButton = iconButton(symbol: "trash", action: #selector(clearButtonPressed))
+
+        bottomBar.addSubview(recordButton)
+        bottomBar.addSubview(clearButton)
+        bottomBar.addSubview(settingsButton)
+
+        NSLayoutConstraint.activate([
+            bottomBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            bottomBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            bottomBar.heightAnchor.constraint(equalToConstant: 76),
+
+            recordButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
+            recordButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
+            recordButton.heightAnchor.constraint(equalToConstant: 42),
+
+            clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -16),
+            settingsButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -24),
+            clearButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
+            settingsButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
+        ])
+    }
+
     private func setupOnboardingOverlay() {
         onboardingOverlay.translatesAutoresizingMaskIntoConstraints = false
         onboardingOverlay.material = .popover
@@ -378,116 +671,6 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         }
     }
 
-    private func setupSearchField() {
-        searchPill.translatesAutoresizingMaskIntoConstraints = false
-        searchPill.wantsLayer = true
-        searchPill.layer?.cornerRadius = 18
-        searchPill.layer?.borderWidth = 1
-        searchPill.layer?.shadowColor = NSColor.black.cgColor
-        searchPill.layer?.shadowOpacity = 0.08
-        searchPill.layer?.shadowOffset = NSSize(width: 0, height: -2)
-        searchPill.layer?.shadowRadius = 6
-
-        searchField.translatesAutoresizingMaskIntoConstraints = false
-        searchField.delegate = self
-        searchField.placeholderString = "Search transcriptions..."
-        searchField.font = .systemFont(ofSize: 13, weight: .regular)
-        searchField.focusRingType = .none
-        searchField.drawsBackground = false
-        searchField.isBordered = false
-        searchField.isBezeled = false
-
-        searchPill.addSubview(searchField)
-        contentView.addSubview(searchPill)
-
-        NSLayoutConstraint.activate([
-            searchPill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 60),
-            searchPill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            searchPill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            searchPill.heightAnchor.constraint(equalToConstant: 36),
-
-            searchField.leadingAnchor.constraint(equalTo: searchPill.leadingAnchor, constant: 16),
-            searchField.trailingAnchor.constraint(equalTo: searchPill.trailingAnchor, constant: -16),
-            searchField.centerYAnchor.constraint(equalTo: searchPill.centerYAnchor),
-        ])
-    }
-
-    private func setupScrollView() {
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .noBorder
-        scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.scrollerStyle = .overlay
-
-        cardsStack.translatesAutoresizingMaskIntoConstraints = false
-        cardsStack.orientation = .vertical
-        cardsStack.alignment = .width
-        cardsStack.spacing = 16
-        cardsStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
-
-        let documentView = FlippedView()
-        documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.addSubview(cardsStack)
-        scrollView.documentView = documentView
-
-        emptyStateStack.translatesAutoresizingMaskIntoConstraints = false
-
-        contentView.addSubview(scrollView)
-        contentView.addSubview(emptyStateStack)
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: searchPill.bottomAnchor, constant: 16),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
-
-            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
-            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
-            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
-
-            cardsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
-            cardsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
-            cardsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
-            cardsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
-
-            emptyStateStack.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
-            emptyStateStack.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
-        ])
-    }
-
-    private func setupBottomBar() {
-        bottomBar.translatesAutoresizingMaskIntoConstraints = false
-        bottomBar.wantsLayer = true
-        contentView.addSubview(bottomBar)
-
-        recordButton.translatesAutoresizingMaskIntoConstraints = false
-        recordButton.target = self
-        recordButton.action = #selector(recordButtonPressed)
-
-        let clearButton = iconButton(symbol: "trash", action: #selector(clearButtonPressed))
-
-        bottomBar.addSubview(recordButton)
-        bottomBar.addSubview(clearButton)
-        bottomBar.addSubview(settingsButton)
-
-        NSLayoutConstraint.activate([
-            bottomBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            bottomBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            bottomBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 76),
-
-            recordButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
-            recordButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
-            recordButton.heightAnchor.constraint(equalToConstant: 42),
-
-            clearButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -16),
-            settingsButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -24),
-            clearButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
-            settingsButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
-        ])
-    }
-
     private func iconButton(symbol: String, action: Selector) -> IconButton {
         let button = IconButton(symbol: symbol)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -507,7 +690,9 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         } else {
             filteredItems = items.filter { $0.text.localizedCaseInsensitiveContains(query) }
         }
-        renderCards()
+        if tabSegmentedControl.selectedSegment == 0 {
+            renderCards()
+        }
     }
 
     private func refreshColors() {
@@ -520,6 +705,7 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         recordButton.refreshColors()
         cardsStack.arrangedSubviews.forEach { view in
             (view as? TranscriptionCardView)?.refreshColors()
+            (view as? ConversationCardView)?.refreshColors()
         }
     }
 
@@ -529,28 +715,59 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             view.removeFromSuperview()
         }
 
-        emptyStateStack.isHidden = !filteredItems.isEmpty
+        if tabSegmentedControl.selectedSegment == 0 {
+            // Tab 0: Transcriptions
+            emptyStateStack.isHidden = !filteredItems.isEmpty
+            if let emptyLabel = emptyStateStack.arrangedSubviews.last as? NSTextField {
+                emptyLabel.stringValue = "No transcriptions yet"
+            }
 
-        for item in filteredItems {
-            let card = TranscriptionCardView(
-                item: item,
-                date: dateFormatter.string(from: item.createdAt),
-                time: timeFormatter.string(from: item.createdAt),
-                onCopy: { text in
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                },
-                onDelete: { [weak self] id in
-                    self?.deleteTranscription(id: id)
-                }
-            )
-            card.translatesAutoresizingMaskIntoConstraints = false
-            cardsStack.addArrangedSubview(card)
-            
-            NSLayoutConstraint.activate([
-                card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
-                card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
-            ])
+            for item in filteredItems {
+                let card = TranscriptionCardView(
+                    item: item,
+                    date: dateFormatter.string(from: item.createdAt),
+                    time: timeFormatter.string(from: item.createdAt),
+                    onCopy: { text in
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    },
+                    onDelete: { [weak self] id in
+                        self?.deleteTranscription(id: id)
+                    }
+                )
+                card.translatesAutoresizingMaskIntoConstraints = false
+                cardsStack.addArrangedSubview(card)
+                
+                NSLayoutConstraint.activate([
+                    card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+                ])
+            }
+        } else {
+            // Tab 1: Conversations (Voice Memos)
+            emptyStateStack.isHidden = !recordedConversations.isEmpty
+            if let emptyLabel = emptyStateStack.arrangedSubviews.last as? NSTextField {
+                emptyLabel.stringValue = "No voice recordings found in ~/.voicetyper/conversation"
+            }
+
+            for item in recordedConversations {
+                let card = ConversationCardView(
+                    item: item,
+                    onOpenInFinder: { wavURL in
+                        NSWorkspace.shared.activateFileViewerSelecting([wavURL])
+                    },
+                    onPlay: { wavURL in
+                        NSWorkspace.shared.open(wavURL)
+                    }
+                )
+                card.translatesAutoresizingMaskIntoConstraints = false
+                cardsStack.addArrangedSubview(card)
+
+                NSLayoutConstraint.activate([
+                    card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 110)
+                ])
+            }
         }
     }
 
@@ -564,6 +781,210 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
     @objc private func settingsButtonPressed() {
         onSettingsPressed?(settingsButton)
+    }
+}
+
+// MARK: - ConversationCardView
+
+@MainActor
+final class ConversationCardView: NSView {
+    nonisolated override var isFlipped: Bool { true }
+    let item: RecordedConversationItem
+    private let onOpenInFinder: (URL) -> Void
+    private let onPlay: (URL) -> Void
+
+    private let titleLabel: NSTextField
+    private let previewLabel: NSTextField
+    private let dateBadge: NSTextField
+    private let timeBadge: NSTextField
+    private let sizeBadge: NSTextField
+    private let openButton: NSButton
+    private let playButton: NSButton
+
+    private var trackingArea: NSTrackingArea?
+
+    init(
+        item: RecordedConversationItem,
+        onOpenInFinder: @escaping (URL) -> Void,
+        onPlay: @escaping (URL) -> Void
+    ) {
+        self.item = item
+        self.onOpenInFinder = onOpenInFinder
+        self.onPlay = onPlay
+
+        self.titleLabel = NSTextField(labelWithString: item.filename + ".wav")
+        self.previewLabel = NSTextField(wrappingLabelWithString: item.transcriptPreview)
+        self.dateBadge = NSTextField(labelWithString: item.dateFormatted)
+        self.timeBadge = NSTextField(labelWithString: item.timeFormatted)
+        self.sizeBadge = NSTextField(labelWithString: item.fileSizeString)
+
+        self.openButton = NSButton(title: "Reveal in Finder", target: nil, action: nil)
+        self.playButton = NSButton(title: "Play", target: nil, action: nil)
+
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1.5
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.08
+        layer?.shadowOffset = NSSize(width: 0, height: -2)
+        layer?.shadowRadius = 6
+
+        setupUI()
+        refreshColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupUI() {
+        let micIcon = NSImageView()
+        micIcon.translatesAutoresizingMaskIntoConstraints = false
+        micIcon.image = NSImage(systemSymbolName: "waveform.and.mic", accessibilityDescription: nil)
+        micIcon.contentTintColor = Palette.accentPurple
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingMiddle
+
+        previewLabel.translatesAutoresizingMaskIntoConstraints = false
+        previewLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        previewLabel.maximumNumberOfLines = 3
+        previewLabel.lineBreakMode = .byWordWrapping
+
+        dateBadge.translatesAutoresizingMaskIntoConstraints = false
+        dateBadge.font = .systemFont(ofSize: 11, weight: .medium)
+
+        timeBadge.translatesAutoresizingMaskIntoConstraints = false
+        timeBadge.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+
+        sizeBadge.translatesAutoresizingMaskIntoConstraints = false
+        sizeBadge.font = .systemFont(ofSize: 10, weight: .medium)
+        sizeBadge.textColor = Palette.secondaryText
+
+        openButton.translatesAutoresizingMaskIntoConstraints = false
+        openButton.bezelStyle = .rounded
+        openButton.font = .systemFont(ofSize: 11, weight: .semibold)
+        openButton.target = self
+        openButton.action = #selector(openClicked)
+        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: nil) {
+            folderImg.size = NSSize(width: 12, height: 12)
+            openButton.image = folderImg
+            openButton.imagePosition = .imageLeading
+        }
+
+        playButton.translatesAutoresizingMaskIntoConstraints = false
+        playButton.bezelStyle = .rounded
+        playButton.font = .systemFont(ofSize: 11, weight: .medium)
+        playButton.target = self
+        playButton.action = #selector(playClicked)
+        if let playImg = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil) {
+            playImg.size = NSSize(width: 10, height: 10)
+            playButton.image = playImg
+            playButton.imagePosition = .imageLeading
+        }
+
+        let divider = NSBox()
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.boxType = .separator
+        divider.alphaValue = 0.4
+
+        addSubview(micIcon)
+        addSubview(titleLabel)
+        addSubview(sizeBadge)
+        addSubview(previewLabel)
+        addSubview(divider)
+        addSubview(dateBadge)
+        addSubview(timeBadge)
+        addSubview(playButton)
+        addSubview(openButton)
+
+        NSLayoutConstraint.activate([
+            micIcon.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            micIcon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            micIcon.widthAnchor.constraint(equalToConstant: 18),
+            micIcon.heightAnchor.constraint(equalToConstant: 18),
+
+            titleLabel.centerYAnchor.constraint(equalTo: micIcon.centerYAnchor),
+            titleLabel.leadingAnchor.constraint(equalTo: micIcon.trailingAnchor, constant: 8),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: sizeBadge.leadingAnchor, constant: -8),
+
+            sizeBadge.centerYAnchor.constraint(equalTo: micIcon.centerYAnchor),
+            sizeBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+
+            previewLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
+            previewLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            previewLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+
+            divider.topAnchor.constraint(equalTo: previewLabel.bottomAnchor, constant: 12),
+            divider.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            divider.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+
+            dateBadge.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 10),
+            dateBadge.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+
+            timeBadge.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
+            timeBadge.leadingAnchor.constraint(equalTo: dateBadge.trailingAnchor, constant: 8),
+            timeBadge.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
+            openButton.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
+            openButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+
+            playButton.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
+            playButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -6),
+        ])
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        if let trackingArea = trackingArea {
+            addTrackingArea(trackingArea)
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            layer?.borderColor = Palette.accentPurple.withAlphaComponent(0.6).cgColor
+            layer?.shadowOpacity = 0.16
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            layer?.borderColor = Palette.border.cgColor
+            layer?.shadowOpacity = 0.08
+        }
+    }
+
+    @objc private func openClicked() {
+        onOpenInFinder(item.wavURL)
+    }
+
+    @objc private func playClicked() {
+        onPlay(item.wavURL)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshColors()
+    }
+
+    func refreshColors() {
+        layer?.backgroundColor = Palette.cardBackground.cgColor
+        layer?.borderColor = Palette.border.cgColor
+        titleLabel.textColor = Palette.primaryText
+        previewLabel.textColor = Palette.secondaryText
+        dateBadge.textColor = Palette.secondaryText
+        timeBadge.textColor = Palette.secondaryText
     }
 }
 
@@ -906,6 +1327,7 @@ class ThemeAwareView: NSView {
         onAppearanceChanged?()
     }
 }
+
 // MARK: - Palette
 
 private enum Palette {
@@ -947,6 +1369,7 @@ private enum Palette {
     )
     static let recording = NSColor(calibratedRed: 0.99, green: 0.38, blue: 0.36, alpha: 1)
     static let accentGreen = NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.50, alpha: 1)
+    static let accentPurple = NSColor(calibratedRed: 0.65, green: 0.45, blue: 0.95, alpha: 1)
 
     private static func dynamic(dark: NSColor, light: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
