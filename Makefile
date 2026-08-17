@@ -1,5 +1,5 @@
-.PHONY: help build compile test unit-test integration-test run dev stop download-models debug install uninstall clean \
-        voicetyper.build voicetyper.compile voicetyper.test voicetyper.unit-test voicetyper.run voicetyper.dev \
+.PHONY: help build compile test unit-test integration-test test-install verify check ci run dev stop download-models debug install uninstall clean \
+        voicetyper.build voicetyper.compile voicetyper.test voicetyper.unit-test voicetyper.verify voicetyper.run voicetyper.dev \
         voicetyper.stop voicetyper.download-models voicetyper.debug voicetyper.install voicetyper.uninstall voicetyper.clean
 
 help:
@@ -16,12 +16,14 @@ help:
 	@echo "================================================================="
 	@echo "Available commands:"
 	@echo "  make build / compile     - Build the VoiceTyper Swift executable"
-	@echo "  make test / unit-test    - Run Swift unit & integration test suites"
+	@echo "  make test / unit-test    - Run Swift unit & installation lifecycle tests"
+	@echo "  make verify / check / ci - Full quality gate (release build + all tests)"
+	@echo "  make test-install        - Run isolated installation & CLI lifecycle test"
 	@echo "  make run                 - Run VoiceTyper background menu bar agent"
 	@echo "  make dev / debug         - Run VoiceTyper interactively in debug mode"
 	@echo "  make stop                - Stop running VoiceTyper background processes"
 	@echo "  make download-models     - Download Whisper & NVIDIA Parakeet models"
-	@echo "  make install             - Build & install binary to /usr/local/bin"
+	@echo "  make install             - Build & install binary to ~/.local/bin"
 	@echo "  make uninstall           - Uninstall binary and config from system"
 	@echo "  make clean               - Remove build artifacts and local models"
 	@echo ""
@@ -29,6 +31,7 @@ help:
 	@echo "  make voicetyper.build"
 	@echo "  make voicetyper.run"
 	@echo "  make voicetyper.test"
+	@echo "  make voicetyper.verify"
 	@echo "  make voicetyper.debug"
 	@echo "  make voicetyper.download-models"
 	@echo ""
@@ -37,15 +40,28 @@ help:
 build:
 	swift build
 
-compile: build
+compile:
+	swift build -c release
 
-# Runs unit and integration test suites
-test:
+# Runs Swift unit tests
+unit-test:
 	swift test
 
-unit-test: test
+# Runs end-to-end installation & CLI lifecycle test suite
+integration-test:
+	./tests/test_install.sh
 
-integration-test: test
+test-install: integration-test
+
+# Runs both unit tests and installation lifecycle integration tests
+test: unit-test integration-test
+
+# Full quality gate verification (compile in release mode + all tests)
+verify: compile test
+
+check: verify
+
+ci: verify
 
 # Runs the VoiceTyper executable in the background
 run:
