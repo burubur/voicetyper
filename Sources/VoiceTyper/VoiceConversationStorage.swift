@@ -1,7 +1,7 @@
 import Foundation
 
 /// Manages raw audio WAV archiving and transcribed text file storage
-/// under `~/.voicetyper/conversation/audio/` and `~/.voicetyper/conversation/text/`.
+/// organized by date folders (e.g. `~/.voicetyper/conversation/2026-08-17/audio/` and `text/`).
 public final class VoiceConversationStorage: Sendable {
 
     /// Default base directory: `~/.voicetyper/conversation`
@@ -10,22 +10,47 @@ public final class VoiceConversationStorage: Sendable {
         .appendingPathComponent("conversation")
 
     public let baseDirectory: URL
-    public let audioDirectory: URL
-    public let textDirectory: URL
+
+    public static let dateFolderFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    public static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter
+    }()
 
     public init(baseDirectory: URL = defaultBaseDirectory) {
         self.baseDirectory = baseDirectory
-        self.audioDirectory = baseDirectory.appendingPathComponent("audio")
-        self.textDirectory = baseDirectory.appendingPathComponent("text")
     }
 
-    /// Ensures the required storage directories exist on disk.
-    public func ensureDirectoriesExist() throws {
-        try FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: textDirectory, withIntermediateDirectories: true)
+    /// Returns the day folder URL for a given date (e.g. `.../conversation/2026-08-17/`).
+    public func dayDirectory(for date: Date = Date()) -> URL {
+        let dateFolder = Self.dateFolderFormatter.string(from: date)
+        return baseDirectory.appendingPathComponent(dateFolder)
     }
 
-    /// Saves raw PCM float frames as a 16kHz 16-bit mono WAV file and saves transcribed text as a UTF-8 text file.
+    /// Returns the audio directory for a given date (e.g. `.../conversation/2026-08-17/audio/`).
+    public func audioDirectory(for date: Date = Date()) -> URL {
+        return dayDirectory(for: date).appendingPathComponent("audio")
+    }
+
+    /// Returns the text directory for a given date (e.g. `.../conversation/2026-08-17/text/`).
+    public func textDirectory(for date: Date = Date()) -> URL {
+        return dayDirectory(for: date).appendingPathComponent("text")
+    }
+
+    /// Ensures the required storage directories exist on disk for the given date.
+    public func ensureDirectoriesExist(for date: Date = Date()) throws {
+        try FileManager.default.createDirectory(at: audioDirectory(for: date), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: textDirectory(for: date), withIntermediateDirectories: true)
+    }
+
+    /// Saves raw PCM float frames as a 16kHz 16-bit mono WAV file and saves transcribed text as a UTF-8 text file,
+    /// grouped under a date folder (e.g., `~/.voicetyper/conversation/2026-08-17/`).
     /// - Parameters:
     ///   - audioFrames: Array of 16kHz PCM Float samples.
     ///   - transcription: Transcribed text output.
@@ -41,15 +66,13 @@ public final class VoiceConversationStorage: Sendable {
         date: Date = Date(),
         identifier: String = UUID().uuidString.prefix(8).lowercased()
     ) throws -> (audioURL: URL, textURL: URL) {
-        try ensureDirectoriesExist()
+        try ensureDirectoriesExist(for: date)
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: date)
-
+        let timestamp = Self.timestampFormatter.string(from: date)
         let filenameBase = "conversation_\(timestamp)_\(identifier)"
-        let wavURL = audioDirectory.appendingPathComponent("\(filenameBase).wav")
-        let txtURL = textDirectory.appendingPathComponent("\(filenameBase).txt")
+
+        let wavURL = audioDirectory(for: date).appendingPathComponent("\(filenameBase).wav")
+        let txtURL = textDirectory(for: date).appendingPathComponent("\(filenameBase).txt")
 
         // 1. Generate & write WAV data
         let wavData = Self.createWavData(from: audioFrames, sampleRate: sampleRate)
@@ -60,6 +83,7 @@ public final class VoiceConversationStorage: Sendable {
         try textContent.write(to: txtURL, atomically: true, encoding: .utf8)
 
         print("💾 Saved voice memo:")
+        print("   📁 Date:  \(Self.dateFolderFormatter.string(from: date))")
         print("   🎵 Audio: \(wavURL.path)")
         print("   📝 Text:  \(txtURL.path)")
 

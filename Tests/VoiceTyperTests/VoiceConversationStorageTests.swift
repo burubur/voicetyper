@@ -22,21 +22,30 @@ final class VoiceConversationStorageTests: XCTestCase {
     }
 
     func testEnsureDirectoriesExist() throws {
-        try storage.ensureDirectoriesExist()
+        let testDate = Date()
+        try storage.ensureDirectoriesExist(for: testDate)
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.audioDirectory.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.textDirectory.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.audioDirectory(for: testDate).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.textDirectory(for: testDate).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.dayDirectory(for: testDate).path))
     }
 
-    func testSaveWavAndTextFiles() throws {
+    func testSaveWavAndTextFilesWithDateFolder() throws {
         let syntheticAudio = AudioTestHelper.generateSineWave(frequency: 440.0, durationSeconds: 0.5)
         let sampleTranscript = "Decision: OpenSCAD remains geometric source of truth."
+        let testDate = Date()
 
         let result = try storage.saveConversation(
             audioFrames: syntheticAudio,
             transcription: sampleTranscript,
+            date: testDate,
             identifier: "test01"
         )
+
+        // Assert date folder exists in path
+        let dateString = VoiceConversationStorage.dateFolderFormatter.string(from: testDate)
+        XCTAssertTrue(result.audioURL.path.contains(dateString))
+        XCTAssertTrue(result.textURL.path.contains(dateString))
 
         // Assert files exist
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path))
