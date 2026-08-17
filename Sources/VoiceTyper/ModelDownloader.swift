@@ -1,3 +1,5 @@
+import Foundation
+
 @MainActor
 final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     static let shared = ModelDownloader()

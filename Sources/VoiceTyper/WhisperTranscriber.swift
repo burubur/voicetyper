@@ -16,6 +16,7 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     private let whisper: Whisper
     private(set) var activeVocabulary: [String] = []
     private(set) var initialPrompt: String?
+    private var initialPromptCString: UnsafeMutablePointer<CChar>?
 
     /// Initializes the transcriber by loading a GGML model file.
     /// - Parameter modelURL: Path to the whisper GGML model (e.g. `ggml-base.en.bin`).
@@ -27,13 +28,27 @@ final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         }
     }
 
+    deinit {
+        if let ptr = initialPromptCString {
+            free(ptr)
+        }
+    }
+
     /// Sets or updates the active vocabulary and initial prompt biasing.
     func setVocabulary(terms: [String]) {
         self.activeVocabulary = terms
         let prompt = VocabularyManager.buildWhisperPrompt(from: terms)
         self.initialPrompt = prompt.isEmpty ? nil : prompt
+        if let ptr = initialPromptCString {
+            free(ptr)
+            initialPromptCString = nil
+        }
         if let p = self.initialPrompt {
-            self.whisper.params.prompt = p
+            let ptr = strdup(p)
+            self.initialPromptCString = ptr
+            self.whisper.params.initial_prompt = UnsafePointer(ptr)
+        } else {
+            self.whisper.params.initial_prompt = nil
         }
     }
 
