@@ -249,6 +249,19 @@ public final class UpgradeManager: Sendable {
             }
         }
 
+        // Ad-hoc code signing for macOS microphone TCC permissions
+        let entitlementsPath = URL(fileURLWithPath: validSourceDir)
+            .appendingPathComponent("Resources/VoiceTyper.entitlements").path
+        let codesign = Process()
+        codesign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        if FileManager.default.fileExists(atPath: entitlementsPath) {
+            codesign.arguments = ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, installPath]
+        } else {
+            codesign.arguments = ["--force", "--sign", "-", installPath]
+        }
+        try? codesign.run()
+        codesign.waitUntilExit()
+
         Swift.print("🚀 Restarting VoiceTyper menu bar agent in background...")
         let pkill = Process()
         pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")

@@ -100,6 +100,14 @@ else
     chmod +x "${PREFIX}/voicetyper"
 fi
 
+if command -v codesign >/dev/null 2>&1; then
+    if [ -f "${REPO_ROOT}/Resources/VoiceTyper.entitlements" ]; then
+        codesign --force --deep --sign - --entitlements "${REPO_ROOT}/Resources/VoiceTyper.entitlements" "${PREFIX}/voicetyper" 2>/dev/null || codesign --force --sign - "${PREFIX}/voicetyper" 2>/dev/null || true
+    else
+        codesign --force --sign - "${PREFIX}/voicetyper" 2>/dev/null || true
+    fi
+fi
+
 echo "✓ Binary installed into ${PREFIX}/voicetyper"
 
 # 6. Record source repo cache for omnipresent voicetyper upgrade
