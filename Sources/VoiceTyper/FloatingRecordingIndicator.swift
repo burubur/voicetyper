@@ -1,20 +1,27 @@
 import ApplicationServices
 import Cocoa
 
-/// A simple view that catches mouse down events
+/// A simple view that catches mouse down events to abort/stop recording
 private class ClickableContainerView: NSView {
     var onMouseDown: (() -> Void)?
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
 
     override func mouseDown(with event: NSEvent) {
         onMouseDown?()
     }
 }
 
-/// A minimalist floating visual overlay that appears while recording.
+/// Unified, Ultra-Sleek Floating Dynamic Island Pill Indicator.
 ///
-/// Supports:
-/// - **Direct Dictation (.standard)**: Compact 32x32 pulsing coral circle.
-/// - **Conversation Capture (.memoryVault)**: Sleek minimal ~90x28px pill with pulsing purple dot, lap badge (`01`, `02`), and ticking timer (`04:28`).
+/// Ensures exact visual symmetry across all dictation modes:
+/// - **Identical Height**: 30px
+/// - **Identical Pill Capsule**: Corner radius 15px with frosted dark glass & drop shadow
+/// - **Direct Dictation (.standard)**: `[ 🔴 REC ]` (62x30px)
+/// - **Conversation Capture (.memoryVault)**: `[ 🟣 01 │ 04:28 ]` (104x30px)
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -32,7 +39,7 @@ final class FloatingRecordingIndicator {
     private var currentLap: Int = 1
     private var activeMode: DictationMode = .standard
 
-    private let standardCoral = NSColor(red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
+    private let standardCoral = NSColor(red: 255 / 255.0, green: 90 / 255.0, blue: 95 / 255.0, alpha: 1.0)
     private let memoryPurple = NSColor(red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 1.0)
 
     private init() {}
@@ -43,8 +50,8 @@ final class FloatingRecordingIndicator {
         self.startTime = Date()
 
         let isMemo = (mode == .memoryVault)
-        let winWidth: CGFloat = isMemo ? 92.0 : 32.0
-        let winHeight: CGFloat = isMemo ? 28.0 : 32.0
+        let winWidth: CGFloat = isMemo ? 104.0 : 62.0
+        let winHeight: CGFloat = 30.0
 
         if window == nil {
             let win = NSWindow(
@@ -74,7 +81,7 @@ final class FloatingRecordingIndicator {
         window?.setFrame(NSRect(origin: position, size: NSSize(width: winWidth, height: winHeight)), display: true)
         window?.makeKeyAndOrderFront(nil)
 
-        // Pop-in animation
+        // Smooth pop-in animation
         window?.alphaValue = 0
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -121,64 +128,67 @@ final class FloatingRecordingIndicator {
         let pill = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         pill.wantsLayer = true
         pill.layer?.cornerRadius = height / 2.0
-        pill.layer?.borderWidth = 1.2
-        pill.layer?.borderColor = isMemo ? memoryPurple.withAlphaComponent(0.6).cgColor : NSColor.white.withAlphaComponent(0.5).cgColor
-        pill.layer?.backgroundColor = isMemo ? NSColor.black.withAlphaComponent(0.75).cgColor : standardCoral.withAlphaComponent(0.85).cgColor
+        pill.layer?.borderWidth = 1.0
+        pill.layer?.borderColor = isMemo
+            ? memoryPurple.withAlphaComponent(0.45).cgColor
+            : standardCoral.withAlphaComponent(0.45).cgColor
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.82).cgColor
 
         pill.layer?.shadowColor = NSColor.black.cgColor
-        pill.layer?.shadowOpacity = 0.35
-        pill.layer?.shadowOffset = CGSize(width: 0, height: -2)
-        pill.layer?.shadowRadius = 4
+        pill.layer?.shadowOpacity = 0.4
+        pill.layer?.shadowOffset = CGSize(width: 0, height: -3)
+        pill.layer?.shadowRadius = 6
         self.pillView = pill
 
         if isMemo {
-            // Purple pulsing dot
-            let dot = NSView(frame: NSRect(x: 8, y: 9, width: 10, height: 10))
+            // Purple pulsing breathing dot
+            let dot = NSView(frame: NSRect(x: 10, y: 10, width: 10, height: 10))
             dot.wantsLayer = true
             dot.layer?.cornerRadius = 5
             dot.layer?.backgroundColor = memoryPurple.cgColor
             self.dotLayer = dot.layer
             pill.addSubview(dot)
 
-            // Minimal Lap Number (e.g. 01, 02)
+            // Lap Counter Number in Middle (e.g. 01, 02)
             let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
-            lap.frame = NSRect(x: 21, y: 5, width: 18, height: 18)
+            lap.frame = NSRect(x: 25, y: 6, width: 20, height: 18)
             lap.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
             lap.textColor = memoryPurple
             lap.alignment = .left
             self.lapLabel = lap
             pill.addSubview(lap)
 
-            // 1px Subtle Separator
-            let sep = NSBox(frame: NSRect(x: 42, y: 7, width: 1, height: 14))
+            // Subtle 1px Divider
+            let sep = NSBox(frame: NSRect(x: 48, y: 8, width: 1, height: 14))
             sep.boxType = .custom
-            sep.fillColor = NSColor.white.withAlphaComponent(0.25)
+            sep.fillColor = NSColor.white.withAlphaComponent(0.2)
             sep.borderWidth = 0
             self.separatorView = sep
             pill.addSubview(sep)
 
-            // Minimal Ticking Timer (00:00)
+            // Time Lapse Timer (00:00)
             let time = NSTextField(labelWithString: "00:00")
-            time.frame = NSRect(x: 46, y: 5, width: 40, height: 18)
+            time.frame = NSRect(x: 54, y: 6, width: 42, height: 18)
             time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
             time.textColor = .white
             time.alignment = .center
             self.timeLabel = time
             pill.addSubview(time)
         } else {
-            // Direct dictation: Simple 32x32 mic icon
-            let dot = NSView(frame: NSRect(x: 2, y: 2, width: 28, height: 28))
+            // Direct dictation: Coral pulsing dot + "REC" badge
+            let dot = NSView(frame: NSRect(x: 10, y: 10, width: 10, height: 10))
             dot.wantsLayer = true
-            dot.layer?.cornerRadius = 14
-            dot.layer?.backgroundColor = standardCoral.withAlphaComponent(0.85).cgColor
+            dot.layer?.cornerRadius = 5
+            dot.layer?.backgroundColor = standardCoral.cgColor
             self.dotLayer = dot.layer
-
-            let imgView = NSImageView(frame: NSRect(x: 7, y: 6, width: 14, height: 16))
-            imgView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
-            imgView.contentTintColor = .white
-            imgView.imageScaling = .scaleProportionallyUpOrDown
-            dot.addSubview(imgView)
             pill.addSubview(dot)
+
+            let recLabel = NSTextField(labelWithString: "REC")
+            recLabel.frame = NSRect(x: 25, y: 6, width: 28, height: 18)
+            recLabel.font = .monospacedSystemFont(ofSize: 10, weight: .bold)
+            recLabel.textColor = standardCoral
+            recLabel.alignment = .left
+            pill.addSubview(recLabel)
         }
 
         container.addSubview(pill)
@@ -186,14 +196,23 @@ final class FloatingRecordingIndicator {
 
     private func startPulsing(isMemo: Bool) {
         dotLayer?.removeAnimation(forKey: "recordingPulse")
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1.0
-        pulse.toValue = 0.25
-        pulse.duration = 0.8
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        dotLayer?.add(pulse, forKey: "recordingPulse")
+        
+        let pulseGroup = CAAnimationGroup()
+        pulseGroup.duration = 0.85
+        pulseGroup.autoreverses = true
+        pulseGroup.repeatCount = .infinity
+        pulseGroup.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = 1.0
+        opacity.toValue = 0.35
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 1.0
+        scale.toValue = 1.25
+
+        pulseGroup.animations = [opacity, scale]
+        dotLayer?.add(pulseGroup, forKey: "recordingPulse")
     }
 
     // MARK: - Timer
