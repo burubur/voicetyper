@@ -17,7 +17,7 @@ private class ClickableContainerView: NSView {
 
 /// Floating recording indicator:
 /// - **Direct Transcription (.standard)**: 34x34px Pink/Coral Circle with centered breathing microphone icon.
-/// - **Conversation Capture (.memoryVault)**: 116x34px Purple Pill with breathing microphone on left, Lap Counter (`01`), and live Time Lapse (`04:28`) on right.
+/// - **Conversation Capture (.memoryVault)**: 116x34px Purple Pill with perfectly vertically centered microphone, Lap Counter (`01`), and live Time Lapse (`04:28`).
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -147,41 +147,78 @@ final class FloatingRecordingIndicator {
         pill.layer?.shadowOffset = CGSize(width: 0, height: -2)
         pill.layer?.shadowRadius = 4
 
-        // 1. Microphone Icon
-        let micX: CGFloat = isMemo ? 8 : 7
-        let imgView = NSImageView(frame: NSRect(x: micX, y: 6, width: 15, height: 18))
-        imgView.contentTintColor = .white
-        imgView.imageScaling = .scaleProportionallyUpOrDown
-        imgView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording Microphone")
-        self.imageView = imgView
-        pill.addSubview(imgView)
-
         if isMemo {
-            // 2. Lap Counter (e.g. 01, 02)
+            // Symmetrical, Pixel-Perfect Centered Stack View
+            let contentStack = NSStackView()
+            contentStack.orientation = .horizontal
+            contentStack.alignment = .centerY
+            contentStack.spacing = 5
+            contentStack.translatesAutoresizingMaskIntoConstraints = false
+            pill.addSubview(contentStack)
+
+            NSLayoutConstraint.activate([
+                contentStack.centerXAnchor.constraint(equalTo: pill.centerXAnchor),
+                contentStack.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+                contentStack.heightAnchor.constraint(equalToConstant: 20)
+            ])
+
+            // 1. Microphone Icon
+            let imgView = NSImageView()
+            imgView.contentTintColor = .white
+            imgView.imageScaling = .scaleProportionallyUpOrDown
+            imgView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording Microphone")
+            imgView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                imgView.widthAnchor.constraint(equalToConstant: 14),
+                imgView.heightAnchor.constraint(equalToConstant: 16)
+            ])
+            self.imageView = imgView
+            contentStack.addArrangedSubview(imgView)
+
+            // 2. Lap Counter (01, 02)
             let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
-            lap.frame = NSRect(x: 27, y: 6, width: 22, height: 18)
             lap.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
             lap.textColor = .white
             lap.alignment = .center
             self.lapLabel = lap
-            pill.addSubview(lap)
+            contentStack.addArrangedSubview(lap)
 
             // 3. Subtle 1px Divider
-            let sep = NSBox(frame: NSRect(x: 52, y: 8, width: 1, height: 14))
+            let sep = NSBox()
             sep.boxType = .custom
             sep.fillColor = NSColor.white.withAlphaComponent(0.35)
             sep.borderWidth = 0
+            sep.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                sep.widthAnchor.constraint(equalToConstant: 1),
+                sep.heightAnchor.constraint(equalToConstant: 12)
+            ])
             self.separatorView = sep
-            pill.addSubview(sep)
+            contentStack.addArrangedSubview(sep)
 
-            // 4. Live Ticking Time Lapse (00:00) exactly after lap counter
+            // 4. Time Lapse (00:00)
             let time = NSTextField(labelWithString: "00:00")
-            time.frame = NSRect(x: 58, y: 6, width: 46, height: 18)
             time.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
             time.textColor = .white
             time.alignment = .center
             self.timeLabel = time
-            pill.addSubview(time)
+            contentStack.addArrangedSubview(time)
+        } else {
+            // Direct Dictation: Perfectly Centered Mic in Circle
+            let imgView = NSImageView()
+            imgView.contentTintColor = .white
+            imgView.imageScaling = .scaleProportionallyUpOrDown
+            imgView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording Microphone")
+            imgView.translatesAutoresizingMaskIntoConstraints = false
+            pill.addSubview(imgView)
+
+            NSLayoutConstraint.activate([
+                imgView.centerXAnchor.constraint(equalTo: pill.centerXAnchor),
+                imgView.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+                imgView.widthAnchor.constraint(equalToConstant: 14),
+                imgView.heightAnchor.constraint(equalToConstant: 16)
+            ])
+            self.imageView = imgView
         }
 
         container.addSubview(pill)
