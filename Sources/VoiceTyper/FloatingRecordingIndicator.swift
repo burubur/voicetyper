@@ -1,7 +1,7 @@
 import ApplicationServices
 import Cocoa
 
-/// A simple view that catches mouse down events to abort/stop recording
+/// A clickable container view that catches mouse clicks to stop or discard recording
 private class ClickableContainerView: NSView {
     var onMouseDown: (() -> Void)?
 
@@ -15,13 +15,12 @@ private class ClickableContainerView: NSView {
     }
 }
 
-/// Unified, Ultra-Sleek Floating Dynamic Island Pill Indicator.
+/// Floating, Blinking Recording Capsule Indicator.
 ///
-/// Ensures exact visual symmetry across all dictation modes:
-/// - **Identical Height**: 30px
-/// - **Identical Pill Capsule**: Corner radius 15px with frosted dark glass & drop shadow
-/// - **Direct Dictation (.standard)**: `[ 🔴 REC ]` (62x30px)
-/// - **Conversation Capture (.memoryVault)**: `[ 🟣 01 │ 04:28 ]` (104x30px)
+/// Features:
+/// - **Direct Dictation (.standard)**: Vibrant Coral/Rose pill with breathing white microphone icon.
+/// - **Conversation Capture (.memoryVault)**: Vibrant Purple pill with breathing white microphone icon + Lap Counter (`01`) + Time Lapse (`04:28`).
+/// - **Identical Height**: 34px (Corner radius 17px) across both modes.
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -29,7 +28,7 @@ final class FloatingRecordingIndicator {
 
     private var window: NSWindow?
     private var pillView: NSView?
-    private var dotLayer: CALayer?
+    private var micIconView: NSImageView?
     private var lapLabel: NSTextField?
     private var timeLabel: NSTextField?
     private var separatorView: NSView?
@@ -39,8 +38,10 @@ final class FloatingRecordingIndicator {
     private var currentLap: Int = 1
     private var activeMode: DictationMode = .standard
 
-    private let standardCoral = NSColor(red: 255 / 255.0, green: 90 / 255.0, blue: 95 / 255.0, alpha: 1.0)
-    private let memoryPurple = NSColor(red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 1.0)
+    /// Vibrant coral/pink for direct dictation
+    private let transcriptionCoral = NSColor(red: 255 / 255.0, green: 75 / 255.0, blue: 95 / 255.0, alpha: 0.95)
+    /// Vibrant purple for conversation mode
+    private let conversationPurple = NSColor(red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 0.95)
 
     private init() {}
 
@@ -50,8 +51,8 @@ final class FloatingRecordingIndicator {
         self.startTime = Date()
 
         let isMemo = (mode == .memoryVault)
-        let winWidth: CGFloat = isMemo ? 104.0 : 62.0
-        let winHeight: CGFloat = 30.0
+        let winWidth: CGFloat = isMemo ? 116.0 : 42.0
+        let winHeight: CGFloat = 34.0
 
         if window == nil {
             let win = NSWindow(
@@ -88,7 +89,7 @@ final class FloatingRecordingIndicator {
             window?.animator().alphaValue = 1.0
         }
 
-        startPulsing(isMemo: isMemo)
+        startBlinkingAnimation()
 
         if isMemo {
             startTimer()
@@ -114,7 +115,8 @@ final class FloatingRecordingIndicator {
         } completionHandler: { [weak self] in
             DispatchQueue.main.async {
                 window.orderOut(nil)
-                self?.dotLayer?.removeAnimation(forKey: "recordingPulse")
+                self?.micIconView?.layer?.removeAnimation(forKey: "micBlink")
+                self?.pillView?.layer?.removeAnimation(forKey: "pillGlow")
             }
         }
     }
@@ -125,94 +127,92 @@ final class FloatingRecordingIndicator {
         guard let container = window?.contentView as? ClickableContainerView else { return }
         container.subviews.forEach { $0.removeFromSuperview() }
 
+        let pillColor = isMemo ? conversationPurple : transcriptionCoral
+
         let pill = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         pill.wantsLayer = true
         pill.layer?.cornerRadius = height / 2.0
+        pill.layer?.backgroundColor = pillColor.cgColor
+        pill.layer?.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
         pill.layer?.borderWidth = 1.0
-        pill.layer?.borderColor = isMemo
-            ? memoryPurple.withAlphaComponent(0.45).cgColor
-            : standardCoral.withAlphaComponent(0.45).cgColor
-        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.82).cgColor
 
-        pill.layer?.shadowColor = NSColor.black.cgColor
-        pill.layer?.shadowOpacity = 0.4
-        pill.layer?.shadowOffset = CGSize(width: 0, height: -3)
-        pill.layer?.shadowRadius = 6
+        pill.layer?.shadowColor = pillColor.cgColor
+        pill.layer?.shadowOpacity = 0.45
+        pill.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        pill.layer?.shadowRadius = 8
         self.pillView = pill
 
-        if isMemo {
-            // Purple pulsing breathing dot
-            let dot = NSView(frame: NSRect(x: 10, y: 10, width: 10, height: 10))
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 5
-            dot.layer?.backgroundColor = memoryPurple.cgColor
-            self.dotLayer = dot.layer
-            pill.addSubview(dot)
+        // 1. Crisp White Microphone Icon (on left)
+        let micIcon = NSImageView(frame: NSRect(x: isMemo ? 10 : 12, y: 8, width: 18, height: 18))
+        micIcon.wantsLayer = true
+        micIcon.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording Microphone")
+        micIcon.contentTintColor = .white
+        micIcon.imageScaling = .scaleProportionallyUpOrDown
+        self.micIconView = micIcon
+        pill.addSubview(micIcon)
 
-            // Lap Counter Number in Middle (e.g. 01, 02)
+        if isMemo {
+            // 2. Lap Counter in Middle (e.g. 01, 02)
             let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
-            lap.frame = NSRect(x: 25, y: 6, width: 20, height: 18)
-            lap.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
-            lap.textColor = memoryPurple
-            lap.alignment = .left
+            lap.frame = NSRect(x: 32, y: 8, width: 22, height: 18)
+            lap.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
+            lap.textColor = .white
+            lap.alignment = .center
             self.lapLabel = lap
             pill.addSubview(lap)
 
-            // Subtle 1px Divider
-            let sep = NSBox(frame: NSRect(x: 48, y: 8, width: 1, height: 14))
+            // 3. Subtle 1px White Divider
+            let sep = NSBox(frame: NSRect(x: 58, y: 9, width: 1, height: 16))
             sep.boxType = .custom
-            sep.fillColor = NSColor.white.withAlphaComponent(0.2)
+            sep.fillColor = NSColor.white.withAlphaComponent(0.4)
             sep.borderWidth = 0
             self.separatorView = sep
             pill.addSubview(sep)
 
-            // Time Lapse Timer (00:00)
+            // 4. Live Ticking Time Lapse (00:00)
             let time = NSTextField(labelWithString: "00:00")
-            time.frame = NSRect(x: 54, y: 6, width: 42, height: 18)
-            time.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            time.frame = NSRect(x: 64, y: 8, width: 44, height: 18)
+            time.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
             time.textColor = .white
             time.alignment = .center
             self.timeLabel = time
             pill.addSubview(time)
-        } else {
-            // Direct dictation: Coral pulsing dot + "REC" badge
-            let dot = NSView(frame: NSRect(x: 10, y: 10, width: 10, height: 10))
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 5
-            dot.layer?.backgroundColor = standardCoral.cgColor
-            self.dotLayer = dot.layer
-            pill.addSubview(dot)
-
-            let recLabel = NSTextField(labelWithString: "REC")
-            recLabel.frame = NSRect(x: 25, y: 6, width: 28, height: 18)
-            recLabel.font = .monospacedSystemFont(ofSize: 10, weight: .bold)
-            recLabel.textColor = standardCoral
-            recLabel.alignment = .left
-            pill.addSubview(recLabel)
         }
 
         container.addSubview(pill)
     }
 
-    private func startPulsing(isMemo: Bool) {
-        dotLayer?.removeAnimation(forKey: "recordingPulse")
-        
-        let pulseGroup = CAAnimationGroup()
-        pulseGroup.duration = 0.85
-        pulseGroup.autoreverses = true
-        pulseGroup.repeatCount = .infinity
-        pulseGroup.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+    private func startBlinkingAnimation() {
+        // Microphone breathing opacity & scale animation
+        micIconView?.layer?.removeAnimation(forKey: "micBlink")
+        pillView?.layer?.removeAnimation(forKey: "pillGlow")
+
+        let blinkGroup = CAAnimationGroup()
+        blinkGroup.duration = 0.85
+        blinkGroup.autoreverses = true
+        blinkGroup.repeatCount = .infinity
+        blinkGroup.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
 
         let opacity = CABasicAnimation(keyPath: "opacity")
         opacity.fromValue = 1.0
-        opacity.toValue = 0.35
+        opacity.toValue = 0.4
 
         let scale = CABasicAnimation(keyPath: "transform.scale")
         scale.fromValue = 1.0
-        scale.toValue = 1.25
+        scale.toValue = 1.18
 
-        pulseGroup.animations = [opacity, scale]
-        dotLayer?.add(pulseGroup, forKey: "recordingPulse")
+        blinkGroup.animations = [opacity, scale]
+        micIconView?.layer?.add(blinkGroup, forKey: "micBlink")
+
+        // Subtle outer pill glow pulse
+        let glowPulse = CABasicAnimation(keyPath: "shadowOpacity")
+        glowPulse.duration = 0.85
+        glowPulse.autoreverses = true
+        glowPulse.repeatCount = .infinity
+        glowPulse.fromValue = 0.45
+        glowPulse.toValue = 0.75
+        glowPulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        pillView?.layer?.add(glowPulse, forKey: "pillGlow")
     }
 
     // MARK: - Timer
