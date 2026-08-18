@@ -1125,35 +1125,33 @@ class TranscriptionCardView: NSView {
         addSubview(timeLabel)
 
         NSLayoutConstraint.activate([
-            textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 20),
-            textLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            textLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -10),
+            textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            textLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            textLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
 
-            copyButton.topAnchor.constraint(equalTo: topAnchor, constant: 18),
-            copyButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
-            copyButton.widthAnchor.constraint(equalToConstant: 22),
-            copyButton.heightAnchor.constraint(equalToConstant: 22),
+            divider.topAnchor.constraint(equalTo: textLabel.bottomAnchor, constant: 12),
+            divider.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            divider.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
 
-            deleteButton.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            dateLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 10),
+            dateLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+
+            timeLabel.centerYAnchor.constraint(equalTo: dateLabel.centerYAnchor),
+            timeLabel.leadingAnchor.constraint(equalTo: dateLabel.trailingAnchor, constant: 8),
+            timeLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
+            deleteButton.centerYAnchor.constraint(equalTo: dateLabel.centerYAnchor),
             deleteButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             deleteButton.widthAnchor.constraint(equalToConstant: 22),
             deleteButton.heightAnchor.constraint(equalToConstant: 22),
 
+            copyButton.centerYAnchor.constraint(equalTo: dateLabel.centerYAnchor),
+            copyButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
+            copyButton.widthAnchor.constraint(equalToConstant: 22),
+            copyButton.heightAnchor.constraint(equalToConstant: 22),
+
             toastLabel.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -6),
-            toastLabel.centerYAnchor.constraint(equalTo: copyButton.centerYAnchor),
-
-            divider.topAnchor.constraint(equalTo: textLabel.bottomAnchor, constant: 18),
-            divider.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            divider.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-
-            dateLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 12),
-            dateLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            dateLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-
-            timeLabel.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 2),
-            timeLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            timeLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+            toastLabel.centerYAnchor.constraint(equalTo: dateLabel.centerYAnchor),
         ])
 
         refreshColors()
@@ -1233,6 +1231,8 @@ class TranscriptionCardView: NSView {
         textLabel.textColor = Palette.primaryText
         dateLabel.textColor = Palette.secondaryText
         timeLabel.textColor = Palette.secondaryText
+        copyButton.refreshColors()
+        deleteButton.refreshColors()
     }
 }
 
