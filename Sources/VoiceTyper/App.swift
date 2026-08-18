@@ -274,12 +274,6 @@ final class App: NSObject, NSApplicationDelegate {
         self.activeMode = mode
     }
 
-    @objc private func openConversationsFolder() {
-        let dir = VoiceConversationStorage.defaultBaseDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
-    }
-
     @objc private func modelSubmenuItemClicked(_ sender: NSMenuItem) {
         guard let filename = sender.representedObject as? String else { return }
         switchModel(filename: filename)
