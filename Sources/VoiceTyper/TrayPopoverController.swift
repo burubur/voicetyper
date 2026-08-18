@@ -110,7 +110,7 @@ final class TrayPopoverController: NSObject {
         modePopUp.action = #selector(modeChanged(_:))
         for mode in App.ActiveMode.allCases {
             let item = NSMenuItem(title: mode.displayName, action: nil, keyEquivalent: "")
-            item.representedObject = mode
+            item.representedObject = mode.rawValue
             modePopUp.menu?.addItem(item)
         }
         self.modeButton = modePopUp
@@ -287,7 +287,7 @@ final class TrayPopoverController: NSObject {
 
     func updateActiveMode(_ mode: App.ActiveMode) {
         for item in modeButton?.itemArray ?? [] {
-            if let m = item.representedObject as? App.ActiveMode, m == mode {
+            if let raw = item.representedObject as? String, raw == mode.rawValue {
                 modeButton?.select(item)
                 break
             }
@@ -334,13 +334,13 @@ final class TrayPopoverController: NSObject {
                 let switchBtn = NSButton(title: "Select", target: self, action: #selector(modelButtonClicked(_:)))
                 switchBtn.bezelStyle = .inline
                 switchBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                switchBtn.representedObject = option.filename
+                switchBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
                 row.addArrangedSubview(switchBtn)
             } else {
                 let downloadBtn = NSButton(title: "⬇️ Download", target: self, action: #selector(modelButtonClicked(_:)))
                 downloadBtn.bezelStyle = .inline
                 downloadBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                downloadBtn.representedObject = option.filename
+                downloadBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
                 row.addArrangedSubview(downloadBtn)
             }
 
@@ -352,12 +352,13 @@ final class TrayPopoverController: NSObject {
     // MARK: - Actions
 
     @objc private func modeChanged(_ sender: NSPopUpButton) {
-        guard let mode = sender.selectedItem?.representedObject as? App.ActiveMode else { return }
+        guard let raw = sender.selectedItem?.representedObject as? String,
+              let mode = App.ActiveMode(rawValue: raw) else { return }
         onModeChanged?(mode)
     }
 
     @objc private func modelButtonClicked(_ sender: NSButton) {
-        guard let filename = sender.representedObject as? String else { return }
+        guard let filename = sender.identifier?.rawValue else { return }
         onModelSelected?(filename)
         rebuildModelList()
     }
