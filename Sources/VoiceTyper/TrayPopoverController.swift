@@ -224,7 +224,7 @@ final class TrayPopoverController: NSObject {
         cardBottomRow.addArrangedSubview(NSView()) // spacer
 
         let copyBtn = NSButton(title: "Copy", target: self, action: #selector(copyRecentTranscript))
-        copyBtn.bezelStyle = .inline
+        copyBtn.bezelStyle = .rounded
         copyBtn.font = .systemFont(ofSize: 10, weight: .medium)
         cardBottomRow.addArrangedSubview(copyBtn)
 
@@ -244,15 +244,15 @@ final class TrayPopoverController: NSObject {
         footerRow.translatesAutoresizingMaskIntoConstraints = false
 
         let historyBtn = NSButton(title: "History Window", target: self, action: #selector(historyClicked))
-        historyBtn.bezelStyle = .recessed
+        historyBtn.bezelStyle = .rounded
         historyBtn.font = .systemFont(ofSize: 11, weight: .medium)
 
         let vaultBtn = NSButton(title: "Vault Folder", target: self, action: #selector(vaultClicked))
-        vaultBtn.bezelStyle = .recessed
+        vaultBtn.bezelStyle = .rounded
         vaultBtn.font = .systemFont(ofSize: 11, weight: .medium)
 
         let quitBtn = NSButton(title: "Quit", target: self, action: #selector(quitClicked))
-        quitBtn.bezelStyle = .recessed
+        quitBtn.bezelStyle = .rounded
         quitBtn.font = .systemFont(ofSize: 11, weight: .medium)
 
         footerRow.addArrangedSubview(historyBtn)
@@ -332,13 +332,13 @@ final class TrayPopoverController: NSObject {
                 row.addArrangedSubview(badge)
             } else if isDownloaded {
                 let switchBtn = NSButton(title: "Select", target: self, action: #selector(modelButtonClicked(_:)))
-                switchBtn.bezelStyle = .inline
+                switchBtn.bezelStyle = .rounded
                 switchBtn.font = .systemFont(ofSize: 10, weight: .medium)
                 switchBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
                 row.addArrangedSubview(switchBtn)
             } else {
                 let downloadBtn = NSButton(title: "⬇️ Download", target: self, action: #selector(modelButtonClicked(_:)))
-                downloadBtn.bezelStyle = .inline
+                downloadBtn.bezelStyle = .rounded
                 downloadBtn.font = .systemFont(ofSize: 10, weight: .medium)
                 downloadBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
                 row.addArrangedSubview(downloadBtn)
