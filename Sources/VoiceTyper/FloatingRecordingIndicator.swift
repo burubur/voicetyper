@@ -86,16 +86,20 @@ final class FloatingRecordingIndicator {
             window?.animator().alphaValue = 1.0
         }
 
-        // Pure opacity pulse on background color (no icon resizing or shifting)
+        // Only pulse opacity for direct transcription mode; keep conversation mode steady
         pillLayer?.removeAnimation(forKey: "recordingPulse")
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1.0
-        pulse.toValue = 0.35
-        pulse.duration = 0.8
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        pillLayer?.add(pulse, forKey: "recordingPulse")
+        if !isMemo {
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 1.0
+            pulse.toValue = 0.35
+            pulse.duration = 0.8
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            pillLayer?.add(pulse, forKey: "recordingPulse")
+        } else {
+            pillLayer?.opacity = 1.0
+        }
 
         if isMemo {
             startTimer()
