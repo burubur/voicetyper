@@ -15,15 +15,21 @@ private class ClickableContainerView: NSView {
     }
 }
 
-/// A minimalist circular floating indicator that pulses in opacity while recording.
+/// Floating recording indicator:
+/// - **Direct Transcription (.standard)**: 34x34px Pink/Coral Circle with centered breathing microphone icon.
+/// - **Conversation Capture (.memoryVault)**: 68x34px Purple Pill with breathing microphone on the left + Lap Counter (`01`, `02`) on the right.
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
     var onAbort: (() -> Void)?
 
     private var window: NSWindow?
-    private var circleLayer: CALayer?
+    private var pillLayer: CALayer?
     private var imageView: NSImageView?
+    private var lapLabel: NSTextField?
+
+    private var currentLap: Int = 1
+    private var activeMode: DictationMode = .standard
 
     private let standardCoral = NSColor(red: 253 / 255.0, green: 121 / 255.0, blue: 121 / 255.0, alpha: 1.0)
     private let memoryPurple = NSColor(red: 168 / 255.0, green: 85 / 255.0, blue: 247 / 255.0, alpha: 1.0)
@@ -31,64 +37,44 @@ final class FloatingRecordingIndicator {
     private init() {}
 
     func show(mode: DictationMode = .standard, lap: Int = 1) {
-        let activeBgColor = (mode == .memoryVault) ? memoryPurple : standardCoral
-        let symbolName = "mic.fill"
+        self.activeMode = mode
+        self.currentLap = lap
+
+        let isMemo = (mode == .memoryVault)
+        let activeBgColor = isMemo ? memoryPurple : standardCoral
+
+        let winWidth: CGFloat = isMemo ? 68.0 : 34.0
+        let winHeight: CGFloat = 34.0
 
         if window == nil {
             let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 34, height: 34),
+                contentRect: NSRect(x: 0, y: 0, width: winWidth, height: winHeight),
                 styleMask: .borderless,
                 backing: .buffered,
                 defer: false
             )
             win.isOpaque = false
             win.backgroundColor = .clear
-            win.level = .floating  // Stays on top of everything
+            win.level = .floating  // Stays on top
             win.ignoresMouseEvents = false
             win.hasShadow = false
 
-            // Create a minimal recording circle containing only the icon
-            let container = ClickableContainerView(frame: NSRect(x: 0, y: 0, width: 34, height: 34))
+            let container = ClickableContainerView(frame: NSRect(x: 0, y: 0, width: winWidth, height: winHeight))
             container.wantsLayer = true
             container.onMouseDown = { [weak self] in
                 self?.onAbort?()
             }
-
-            let circle = NSView(frame: NSRect(x: 2, y: 2, width: 30, height: 30))
-            circle.wantsLayer = true
-            self.circleLayer = circle.layer
-
-            circle.layer?.cornerRadius = 15
-            circle.layer?.borderWidth = 1.5
-            circle.layer?.borderColor = NSColor.white.withAlphaComponent(0.6).cgColor
-
-            // Add shadow
-            circle.layer?.shadowColor = NSColor.black.cgColor
-            circle.layer?.shadowOpacity = 0.35
-            circle.layer?.shadowOffset = CGSize(width: 0, height: -2)
-            circle.layer?.shadowRadius = 4
-
-            let imgView = NSImageView(frame: NSRect(x: 7, y: 6, width: 16, height: 18))
-            imgView.contentTintColor = .white
-            imgView.imageScaling = .scaleProportionallyUpOrDown
-            self.imageView = imgView
-
-            circle.addSubview(imgView)
-            container.addSubview(circle)
             win.contentView = container
             self.window = win
         }
 
-        circleLayer?.backgroundColor = activeBgColor.withAlphaComponent(0.85).cgColor
-        let symbolImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
-        imageView?.image = symbolImage
+        buildUI(isMemo: isMemo, width: winWidth, height: winHeight, color: activeBgColor)
 
-        let position = getIndicatorPosition()
-        window?.setFrameOrigin(position)
+        let position = getIndicatorPosition(width: winWidth)
+        window?.setFrame(NSRect(origin: position, size: NSSize(width: winWidth, height: winHeight)), display: true)
         window?.makeKeyAndOrderFront(nil)
 
-        // Pop-in animation
+        // Smooth pop-in animation
         window?.alphaValue = 0
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -96,7 +82,7 @@ final class FloatingRecordingIndicator {
         }
 
         // Pure opacity pulse on background color (no icon resizing or shifting)
-        circleLayer?.removeAnimation(forKey: "recordingPulse")
+        pillLayer?.removeAnimation(forKey: "recordingPulse")
         let pulse = CABasicAnimation(keyPath: "opacity")
         pulse.fromValue = 1.0
         pulse.toValue = 0.35
@@ -104,11 +90,12 @@ final class FloatingRecordingIndicator {
         pulse.autoreverses = true
         pulse.repeatCount = .infinity
         pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        circleLayer?.add(pulse, forKey: "recordingPulse")
+        pillLayer?.add(pulse, forKey: "recordingPulse")
     }
 
     func updateLap(_ lap: Int) {
-        // Lap state tracked internally for conversation chunks
+        self.currentLap = lap
+        lapLabel?.stringValue = String(format: "%02d", lap)
     }
 
     func hide() {
@@ -120,20 +107,63 @@ final class FloatingRecordingIndicator {
         } completionHandler: { [weak self] in
             DispatchQueue.main.async {
                 window.orderOut(nil)
-                self?.circleLayer?.removeAnimation(forKey: "recordingPulse")
+                self?.pillLayer?.removeAnimation(forKey: "recordingPulse")
             }
         }
     }
 
-    /// Places the circular indicator at the bottom center of the active screen.
-    private func getIndicatorPosition() -> NSPoint {
+    // MARK: - UI Construction
+
+    private func buildUI(isMemo: Bool, width: CGFloat, height: CGFloat, color: NSColor) {
+        guard let container = window?.contentView as? ClickableContainerView else { return }
+        container.subviews.forEach { $0.removeFromSuperview() }
+
+        let pill = NSView(frame: NSRect(x: 2, y: 2, width: width - 4, height: height - 4))
+        pill.wantsLayer = true
+        self.pillLayer = pill.layer
+
+        pill.layer?.cornerRadius = (height - 4) / 2.0
+        pill.layer?.backgroundColor = color.withAlphaComponent(0.85).cgColor
+        pill.layer?.borderWidth = 1.5
+        pill.layer?.borderColor = NSColor.white.withAlphaComponent(0.6).cgColor
+
+        // Shadow
+        pill.layer?.shadowColor = NSColor.black.cgColor
+        pill.layer?.shadowOpacity = 0.35
+        pill.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        pill.layer?.shadowRadius = 4
+
+        // 1. Microphone Icon
+        let micX: CGFloat = isMemo ? 8 : 7
+        let imgView = NSImageView(frame: NSRect(x: micX, y: 6, width: 15, height: 18))
+        imgView.contentTintColor = .white
+        imgView.imageScaling = .scaleProportionallyUpOrDown
+        imgView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording Microphone")
+        self.imageView = imgView
+        pill.addSubview(imgView)
+
+        // 2. Lap Counter (Only for Conversation Mode on right side)
+        if isMemo {
+            let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
+            lap.frame = NSRect(x: 28, y: 6, width: 28, height: 18)
+            lap.font = .monospacedDigitSystemFont(ofSize: 13, weight: .bold)
+            lap.textColor = .white
+            lap.alignment = .center
+            self.lapLabel = lap
+            pill.addSubview(lap)
+        }
+
+        container.addSubview(pill)
+    }
+
+    /// Places the indicator at the bottom center of the active screen.
+    private func getIndicatorPosition(width: CGFloat) -> NSPoint {
         let screenFrame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
-        let indicatorWidth: CGFloat = 34.0
         let paddingBottom: CGFloat = 40.0
 
-        let x = screenFrame.midX - (indicatorWidth / 2.0)
+        let x = screenFrame.midX - (width / 2.0)
         let y = screenFrame.minY + paddingBottom
 
         return NSPoint(x: x, y: y)
