@@ -154,7 +154,7 @@ final class App: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(statusBarButtonClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            _ = button.sendAction(on: NSEvent.EventTypeMask([.leftMouseUp, .rightMouseUp]))
         }
 
         trayPopover.onModeChanged = { [weak self] newMode in
@@ -181,16 +181,19 @@ final class App: NSObject, NSApplicationDelegate {
     @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp {
-            rebuildMenuBar()
-            statusItem.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+            let menu = buildContextMenu()
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
         } else {
-            statusItem.menu = nil
             trayPopover.updateActiveMode(activeMode)
             trayPopover.toggle(relativeTo: sender)
         }
     }
 
     private func rebuildMenuBar() {
+        // Kept for backward compatibility if needed by model switchers
+    }
+
+    private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
         let currentModel = WhisperTranscriber.configuredModelFilename
         let currentOption = WhisperTranscriber.availableModels.first { $0.filename.lowercased() == currentModel.lowercased() }
@@ -256,7 +259,7 @@ final class App: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
-        statusItem.menu = menu
+        return menu
     }
 
     @objc private func openConversationsFolder() {
