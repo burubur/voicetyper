@@ -1,13 +1,9 @@
 import Cocoa
 import Foundation
 
-/// Unified macOS Menu Bar Tray Popover Controller.
-/// Provides an all-in-one control hub right under the tray icon:
-/// - Version & Mode Switcher
-/// - Live Recording & Transcribing Status
-/// - 1-Click Speech Model Picker
-/// - Recent Transcription Card with Copy & Open actions
-/// - Quick Action Footer
+/// Ultra-Lightweight, Modern macOS Menu Bar Popover Hub.
+/// Engineered with clean glassmorphic depth, refined typography,
+/// an inline model dropdown selector, and an actionable recent note card.
 @MainActor
 final class TrayPopoverController: NSObject {
     private let popover = NSPopover()
@@ -22,13 +18,12 @@ final class TrayPopoverController: NSObject {
     private var statusDot: NSView?
     private var statusLabel: NSTextField?
     private var modeButton: NSPopUpButton?
-    private var modelStackView: NSStackView?
+    private var modelPopUp: NSPopUpButton?
     private var recentTranscriptLabel: NSTextField?
     private var recentDetailsLabel: NSTextField?
-    private var recentCardView: NSView?
+    private var copyButton: NSButton?
 
     private var lastTranscriptionText: String = ""
-    private var lastTranscriptionTime: String = ""
     private var lastTranscriptionDetails: String = ""
 
     override init() {
@@ -39,14 +34,14 @@ final class TrayPopoverController: NSObject {
     private func setupPopover() {
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 360, height: 420)
+        popover.contentSize = NSSize(width: 320, height: 265)
 
         let container = NSVisualEffectView()
         container.material = .popover
         container.blendingMode = .behindWindow
         container.state = .active
         container.wantsLayer = true
-        container.frame = NSRect(x: 0, y: 0, width: 360, height: 420)
+        container.frame = NSRect(x: 0, y: 0, width: 320, height: 265)
 
         buildUI(in: container)
         contentViewController.view = container
@@ -78,8 +73,8 @@ final class TrayPopoverController: NSObject {
         let mainStack = NSStackView()
         mainStack.orientation = .vertical
         mainStack.alignment = .leading
-        mainStack.spacing = 12
-        mainStack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        mainStack.spacing = 10
+        mainStack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         mainStack.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(mainStack)
 
@@ -90,20 +85,17 @@ final class TrayPopoverController: NSObject {
             mainStack.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
 
-        // 1. Header: Title + Version + Mode Switcher
+        // 1. Header: Brand + Version Badge + Mode Switcher
         let headerRow = NSStackView()
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
-        headerRow.distribution = .fill
-        headerRow.spacing = 8
+        headerRow.spacing = 6
         headerRow.translatesAutoresizingMaskIntoConstraints = false
 
-        let titleLabel = NSTextField(labelWithString: "🎙️ VoiceTyper")
-        titleLabel.font = .systemFont(ofSize: 14, weight: .bold)
+        let brandLabel = NSTextField(labelWithString: "🎙️ VoiceTyper")
+        brandLabel.font = .systemFont(ofSize: 13, weight: .bold)
 
-        let versionBadge = NSTextField(labelWithString: UpgradeManager.currentVersion)
-        versionBadge.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
-        versionBadge.textColor = .secondaryLabelColor
+        let versionBadge = createBadge(text: UpgradeManager.currentVersion)
 
         let modePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         modePopUp.font = .systemFont(ofSize: 11, weight: .medium)
@@ -116,76 +108,91 @@ final class TrayPopoverController: NSObject {
         }
         self.modeButton = modePopUp
 
-        headerRow.addArrangedSubview(titleLabel)
+        headerRow.addArrangedSubview(brandLabel)
         headerRow.addArrangedSubview(versionBadge)
         headerRow.addArrangedSubview(NSView()) // spacer
         headerRow.addArrangedSubview(modePopUp)
         mainStack.addArrangedSubview(headerRow)
         headerRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
 
-        mainStack.addArrangedSubview(createDivider())
+        // 2. Status & Hotkey Hint Pill Bar
+        let statusCard = NSView()
+        statusCard.wantsLayer = true
+        statusCard.layer?.cornerRadius = 6
+        statusCard.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.4).cgColor
+        statusCard.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
+        statusCard.layer?.borderWidth = 1
+        statusCard.translatesAutoresizingMaskIntoConstraints = false
 
-        // 2. Status & Shortcuts Row
-        let statusRow = NSStackView()
-        statusRow.orientation = .horizontal
-        statusRow.alignment = .centerY
-        statusRow.spacing = 6
+        let statusStack = NSStackView()
+        statusStack.orientation = .horizontal
+        statusStack.alignment = .centerY
+        statusStack.spacing = 6
+        statusStack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        statusStack.translatesAutoresizingMaskIntoConstraints = false
+        statusCard.addSubview(statusStack)
+
+        NSLayoutConstraint.activate([
+            statusStack.topAnchor.constraint(equalTo: statusCard.topAnchor),
+            statusStack.leadingAnchor.constraint(equalTo: statusCard.leadingAnchor),
+            statusStack.trailingAnchor.constraint(equalTo: statusCard.trailingAnchor),
+            statusStack.bottomAnchor.constraint(equalTo: statusCard.bottomAnchor)
+        ])
 
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 8, height: 8))
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 4
         dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
         self.statusDot = dot
-        statusRow.addArrangedSubview(dot)
+        statusStack.addArrangedSubview(dot)
         dot.widthAnchor.constraint(equalToConstant: 8).isActive = true
         dot.heightAnchor.constraint(equalToConstant: 8).isActive = true
 
         let status = NSTextField(labelWithString: "Ready")
         status.font = .systemFont(ofSize: 11, weight: .semibold)
         self.statusLabel = status
-        statusRow.addArrangedSubview(status)
+        statusStack.addArrangedSubview(status)
 
-        statusRow.addArrangedSubview(NSView()) // spacer
+        statusStack.addArrangedSubview(NSView()) // spacer
 
         let shortcutHint = NSTextField(labelWithString: "⌥ Hold • ⇧⌥ Memo")
-        shortcutHint.font = .systemFont(ofSize: 11, weight: .regular)
+        shortcutHint.font = .systemFont(ofSize: 10, weight: .regular)
         shortcutHint.textColor = .secondaryLabelColor
-        statusRow.addArrangedSubview(shortcutHint)
+        statusStack.addArrangedSubview(shortcutHint)
 
-        mainStack.addArrangedSubview(statusRow)
-        statusRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
+        mainStack.addArrangedSubview(statusCard)
+        statusCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
 
-        mainStack.addArrangedSubview(createDivider())
+        // 3. Compact Speech Model Dropdown Row
+        let modelRow = NSStackView()
+        modelRow.orientation = .horizontal
+        modelRow.alignment = .centerY
+        modelRow.spacing = 8
+        modelRow.translatesAutoresizingMaskIntoConstraints = false
 
-        // 3. Speech Model Section
-        let modelHeader = NSTextField(labelWithString: "SPEECH MODEL")
-        modelHeader.font = .systemFont(ofSize: 10, weight: .bold)
-        modelHeader.textColor = .secondaryLabelColor
-        mainStack.addArrangedSubview(modelHeader)
+        let modelLabel = NSTextField(labelWithString: "Model:")
+        modelLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        modelLabel.textColor = .secondaryLabelColor
 
-        let modelStack = NSStackView()
-        modelStack.orientation = .vertical
-        modelStack.alignment = .leading
-        modelStack.spacing = 6
-        modelStack.translatesAutoresizingMaskIntoConstraints = false
-        self.modelStackView = modelStack
-        mainStack.addArrangedSubview(modelStack)
-        modelStack.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
+        let modelSelector = NSPopUpButton(frame: .zero, pullsDown: false)
+        modelSelector.font = .systemFont(ofSize: 11, weight: .regular)
+        modelSelector.target = self
+        modelSelector.action = #selector(modelDropdownChanged(_:))
+        self.modelPopUp = modelSelector
 
-        mainStack.addArrangedSubview(createDivider())
+        modelRow.addArrangedSubview(modelLabel)
+        modelRow.addArrangedSubview(modelSelector)
+        mainStack.addArrangedSubview(modelRow)
+        modelRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
 
-        // 4. Recent Transcription Section
-        let recentHeader = NSTextField(labelWithString: "RECENT TRANSCRIPTION")
-        recentHeader.font = .systemFont(ofSize: 10, weight: .bold)
-        recentHeader.textColor = .secondaryLabelColor
-        mainStack.addArrangedSubview(recentHeader)
-
-        let card = NSView()
-        card.wantsLayer = true
-        card.layer?.cornerRadius = 8
-        card.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
-        card.translatesAutoresizingMaskIntoConstraints = false
-        self.recentCardView = card
+        // 4. Actionable Recent Transcription Card
+        let recentCard = NSView()
+        recentCard.wantsLayer = true
+        recentCard.layer?.cornerRadius = 8
+        recentCard.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6).cgColor
+        recentCard.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.25).cgColor
+        recentCard.layer?.borderWidth = 1
+        recentCard.translatesAutoresizingMaskIntoConstraints = false
 
         let cardStack = NSStackView()
         cardStack.orientation = .vertical
@@ -193,13 +200,13 @@ final class TrayPopoverController: NSObject {
         cardStack.spacing = 6
         cardStack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
         cardStack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(cardStack)
+        recentCard.addSubview(cardStack)
 
         NSLayoutConstraint.activate([
-            cardStack.topAnchor.constraint(equalTo: card.topAnchor),
-            cardStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-            cardStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-            cardStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
+            cardStack.topAnchor.constraint(equalTo: recentCard.topAnchor),
+            cardStack.leadingAnchor.constraint(equalTo: recentCard.leadingAnchor),
+            cardStack.trailingAnchor.constraint(equalTo: recentCard.trailingAnchor),
+            cardStack.bottomAnchor.constraint(equalTo: recentCard.bottomAnchor)
         ])
 
         let transcript = NSTextField(labelWithString: "No transcriptions yet. Press Right Option to speak.")
@@ -213,7 +220,7 @@ final class TrayPopoverController: NSObject {
         let cardBottomRow = NSStackView()
         cardBottomRow.orientation = .horizontal
         cardBottomRow.alignment = .centerY
-        cardBottomRow.spacing = 8
+        cardBottomRow.spacing = 6
         cardBottomRow.translatesAutoresizingMaskIntoConstraints = false
 
         let details = NSTextField(labelWithString: "")
@@ -227,34 +234,33 @@ final class TrayPopoverController: NSObject {
         let copyBtn = NSButton(title: "Copy", target: self, action: #selector(copyRecentTranscript))
         copyBtn.bezelStyle = .rounded
         copyBtn.font = .systemFont(ofSize: 10, weight: .medium)
+        self.copyButton = copyBtn
         cardBottomRow.addArrangedSubview(copyBtn)
 
         cardStack.addArrangedSubview(cardBottomRow)
         cardBottomRow.widthAnchor.constraint(equalTo: cardStack.widthAnchor).isActive = true
 
-        mainStack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
+        mainStack.addArrangedSubview(recentCard)
+        recentCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
 
-        mainStack.addArrangedSubview(createDivider())
-
-        // 5. Footer Actions
+        // 5. Minimalist Footer Toolbar
         let footerRow = NSStackView()
         footerRow.orientation = .horizontal
         footerRow.alignment = .centerY
-        footerRow.spacing = 8
+        footerRow.spacing = 6
         footerRow.translatesAutoresizingMaskIntoConstraints = false
 
         let historyBtn = NSButton(title: "History Window", target: self, action: #selector(historyClicked))
         historyBtn.bezelStyle = .rounded
-        historyBtn.font = .systemFont(ofSize: 11, weight: .medium)
+        historyBtn.font = .systemFont(ofSize: 11, weight: .regular)
 
         let vaultBtn = NSButton(title: "Vault Folder", target: self, action: #selector(vaultClicked))
         vaultBtn.bezelStyle = .rounded
-        vaultBtn.font = .systemFont(ofSize: 11, weight: .medium)
+        vaultBtn.font = .systemFont(ofSize: 11, weight: .regular)
 
         let quitBtn = NSButton(title: "Quit", target: self, action: #selector(quitClicked))
         quitBtn.bezelStyle = .rounded
-        quitBtn.font = .systemFont(ofSize: 11, weight: .medium)
+        quitBtn.font = .systemFont(ofSize: 11, weight: .regular)
 
         footerRow.addArrangedSubview(historyBtn)
         footerRow.addArrangedSubview(vaultBtn)
@@ -265,11 +271,14 @@ final class TrayPopoverController: NSObject {
         footerRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
     }
 
-    private func createDivider() -> NSBox {
-        let box = NSBox()
-        box.boxType = .separator
-        box.translatesAutoresizingMaskIntoConstraints = false
-        return box
+    private func createBadge(text: String) -> NSView {
+        let badge = NSTextField(labelWithString: text)
+        badge.font = .monospacedSystemFont(ofSize: 9, weight: .semibold)
+        badge.textColor = .secondaryLabelColor
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 4
+        badge.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
+        return badge
     }
 
     // MARK: - State Updaters
@@ -296,57 +305,29 @@ final class TrayPopoverController: NSObject {
     }
 
     func refreshUI() {
-        rebuildModelList()
+        rebuildModelDropdown()
     }
 
-    private func rebuildModelList() {
-        guard let modelStack = modelStackView else { return }
-        modelStack.subviews.forEach { $0.removeFromSuperview() }
+    private func rebuildModelDropdown() {
+        guard let popUp = modelPopUp else { return }
+        popUp.menu?.removeAllItems()
 
         let currentModel = WhisperTranscriber.configuredModelFilename
 
         for option in WhisperTranscriber.availableModels {
             let isCurrent = option.filename.lowercased() == currentModel.lowercased()
             let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
-
-            let row = NSStackView()
-            row.orientation = .horizontal
-            row.alignment = .centerY
-            row.spacing = 8
-            row.translatesAutoresizingMaskIntoConstraints = false
-
-            let indicator = NSTextField(labelWithString: isCurrent ? "●" : "○")
-            indicator.font = .systemFont(ofSize: 12, weight: .bold)
-            indicator.textColor = isCurrent ? NSColor.systemPurple : NSColor.secondaryLabelColor
-            row.addArrangedSubview(indicator)
-
-            let nameLabel = NSTextField(labelWithString: "\(option.displayName) (\(option.sizeDescription))")
-            nameLabel.font = .systemFont(ofSize: 11, weight: isCurrent ? .bold : .regular)
-            row.addArrangedSubview(nameLabel)
-
-            row.addArrangedSubview(NSView()) // spacer
-
+            
+            let statusSuffix = isDownloaded ? "" : " (⬇️ Download)"
+            let title = "\(option.displayName) — \(option.sizeDescription)\(statusSuffix)"
+            
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.representedObject = option.filename
+            popUp.menu?.addItem(item)
+            
             if isCurrent {
-                let badge = NSTextField(labelWithString: "Active")
-                badge.font = .systemFont(ofSize: 10, weight: .semibold)
-                badge.textColor = .systemGreen
-                row.addArrangedSubview(badge)
-            } else if isDownloaded {
-                let switchBtn = NSButton(title: "Select", target: self, action: #selector(modelButtonClicked(_:)))
-                switchBtn.bezelStyle = .rounded
-                switchBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                switchBtn.identifier = NSUserInterfaceItemIdentifier(rawValue: option.filename)
-                row.addArrangedSubview(switchBtn)
-            } else {
-                let downloadBtn = NSButton(title: "⬇️ Download", target: self, action: #selector(modelButtonClicked(_:)))
-                downloadBtn.bezelStyle = .rounded
-                downloadBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                downloadBtn.identifier = NSUserInterfaceItemIdentifier(rawValue: option.filename)
-                row.addArrangedSubview(downloadBtn)
+                popUp.select(item)
             }
-
-            modelStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: modelStack.widthAnchor).isActive = true
         }
     }
 
@@ -358,10 +339,9 @@ final class TrayPopoverController: NSObject {
         onModeChanged?(mode)
     }
 
-    @objc private func modelButtonClicked(_ sender: NSButton) {
-        guard let filename = sender.identifier?.rawValue else { return }
+    @objc private func modelDropdownChanged(_ sender: NSPopUpButton) {
+        guard let filename = sender.selectedItem?.representedObject as? String else { return }
         onModelSelected?(filename)
-        rebuildModelList()
     }
 
     @objc private func copyRecentTranscript() {
@@ -369,6 +349,12 @@ final class TrayPopoverController: NSObject {
         let pb = NSPasteboard.general
         pb.clearContents()
         _ = pb.setString(lastTranscriptionText, forType: .string)
+
+        // Subtle click feedback
+        copyButton?.title = "Copied!"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.copyButton?.title = "Copy"
+        }
     }
 
     @objc private func historyClicked() {
