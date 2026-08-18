@@ -175,7 +175,7 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // Section 1: Top Actions (History & Vault)
-        let historyItem = NSMenuItem(title: "Show Transcription History", action: #selector(showHistoryWindow), keyEquivalent: "h")
+        let historyItem = NSMenuItem(title: "Show VoiceTyper", action: #selector(showHistoryWindow), keyEquivalent: "h")
         historyItem.keyEquivalentModifierMask = [.command]
         historyItem.target = self
         menu.addItem(historyItem)
