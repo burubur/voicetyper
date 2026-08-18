@@ -48,7 +48,7 @@ final class FloatingRecordingIndicator {
         let isMemo = (mode == .memoryVault)
         let activeBgColor = isMemo ? memoryPurple : standardCoral
 
-        let winWidth: CGFloat = isMemo ? 128.0 : 34.0
+        let winWidth: CGFloat = isMemo ? 136.0 : 34.0
         let winHeight: CGFloat = 34.0
 
         if window == nil {
@@ -228,7 +228,7 @@ final class FloatingRecordingIndicator {
         container.addSubview(pill)
     }
 
-    /// Creates a clean, minimal static voice bar consisting of 3 rounded micro-bars
+    /// Creates a clean, minimal static voice bar consisting of 5 rounded micro-bars
     private func createStaticVoiceBar() -> NSView {
         let barStack = NSStackView()
         barStack.orientation = .horizontal
@@ -236,7 +236,7 @@ final class FloatingRecordingIndicator {
         barStack.spacing = 2
         barStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let heights: [CGFloat] = [6.0, 11.0, 7.0]
+        let heights: [CGFloat] = [4.0, 8.0, 13.0, 9.0, 5.0]
         for h in heights {
             let bar = NSView()
             bar.wantsLayer = true
