@@ -144,23 +144,28 @@ public final class AudioDSP: Sendable {
 
             var real = [Float](repeating: 0, count: halfN)
             var imag = [Float](repeating: 0, count: halfN)
-            var splitComplex = DSPSplitComplex(realp: &real, imagp: &imag)
 
-            windowed.withUnsafeBufferPointer { ptr in
-                ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
-                    vDSP_ctoz(cPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+            real.withUnsafeMutableBufferPointer { realPtr in
+                imag.withUnsafeMutableBufferPointer { imagPtr in
+                    var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
+
+                    windowed.withUnsafeBufferPointer { ptr in
+                        ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
+                            vDSP_ctoz(cPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+                        }
+                    }
+
+                    vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+
+                    var magnitudes = [Float](repeating: 0, count: halfN)
+                    vDSP_zvabs(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfN))
+
+                    var energy: Float = 0
+                    vDSP_svesq(magnitudes, 1, &energy, vDSP_Length(halfN))
+                    frameEnergies[f] = energy
+                    frameMagnitudes.append(magnitudes)
                 }
             }
-
-            vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
-
-            var magnitudes = [Float](repeating: 0, count: halfN)
-            vDSP_zvabs(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfN))
-
-            var energy: Float = 0
-            vDSP_svesq(magnitudes, 1, &energy, vDSP_Length(halfN))
-            frameEnergies[f] = energy
-            frameMagnitudes.append(magnitudes)
         }
 
         // Identify lowest-energy frames as ambient noise baseline
@@ -191,52 +196,57 @@ public final class AudioDSP: Sendable {
 
             var real = [Float](repeating: 0, count: halfN)
             var imag = [Float](repeating: 0, count: halfN)
-            var splitComplex = DSPSplitComplex(realp: &real, imagp: &imag)
 
-            windowed.withUnsafeBufferPointer { ptr in
-                ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
-                    vDSP_ctoz(cPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
-                }
-            }
+            real.withUnsafeMutableBufferPointer { realPtr in
+                imag.withUnsafeMutableBufferPointer { imagPtr in
+                    var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
 
-            vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+                    windowed.withUnsafeBufferPointer { ptr in
+                        ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
+                            vDSP_ctoz(cPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+                        }
+                    }
 
-            var originalMag = [Float](repeating: 0, count: halfN)
-            vDSP_zvabs(&splitComplex, 1, &originalMag, 1, vDSP_Length(halfN))
+                    vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
 
-            // Subtraction: gain = max((|X| - alpha * |N|) / |X|, spectralFloor)
-            for k in 0..<halfN {
-                let orig = originalMag[k]
-                if orig > 1e-6 {
-                    let subtracted = orig - strength * noiseSpectrum[k]
-                    let gain = max(subtracted / orig, spectralFloor)
-                    real[k] *= gain
-                    imag[k] *= gain
-                }
-            }
+                    var originalMag = [Float](repeating: 0, count: halfN)
+                    vDSP_zvabs(&splitComplex, 1, &originalMag, 1, vDSP_Length(halfN))
 
-            // Inverse FFT
-            vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_INVERSE))
+                    // Subtraction: gain = max((|X| - alpha * |N|) / |X|, spectralFloor)
+                    for k in 0..<halfN {
+                        let orig = originalMag[k]
+                        if orig > 1e-6 {
+                            let subtracted = orig - strength * noiseSpectrum[k]
+                            let gain = max(subtracted / orig, spectralFloor)
+                            real[k] *= gain
+                            imag[k] *= gain
+                        }
+                    }
 
-            var reconstructed = [Float](repeating: 0, count: fftSize)
-            reconstructed.withUnsafeMutableBufferPointer { ptr in
-                ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
-                    vDSP_ztoc(&splitComplex, 1, cPtr, 2, vDSP_Length(halfN))
-                }
-            }
+                    // Inverse FFT
+                    vDSP_fft_zrip(setup, &splitComplex, 1, log2n, FFTDirection(FFT_INVERSE))
 
-            // Scale factor 1 / (2 * fftSize) for vDSP real FFT
-            var scale = 1.0 / Float(2 * fftSize)
-            vDSP_vsmul(reconstructed, 1, &scale, &reconstructed, 1, vDSP_Length(fftSize))
+                    var reconstructed = [Float](repeating: 0, count: fftSize)
+                    reconstructed.withUnsafeMutableBufferPointer { ptr in
+                        ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
+                            vDSP_ztoc(&splitComplex, 1, cPtr, 2, vDSP_Length(halfN))
+                        }
+                    }
 
-            // Apply synthesis window & overlap-add
-            vDSP_vmul(reconstructed, 1, window, 1, &reconstructed, 1, vDSP_Length(fftSize))
+                    // Scale factor 1 / (2 * fftSize) for vDSP real FFT
+                    var scale = 1.0 / Float(2 * fftSize)
+                    vDSP_vsmul(reconstructed, 1, &scale, &reconstructed, 1, vDSP_Length(fftSize))
 
-            for i in 0..<fftSize {
-                let outIdx = start + i
-                if outIdx < output.count {
-                    output[outIdx] += reconstructed[i]
-                    windowSum[outIdx] += window[i] * window[i]
+                    // Apply synthesis window & overlap-add
+                    vDSP_vmul(reconstructed, 1, window, 1, &reconstructed, 1, vDSP_Length(fftSize))
+
+                    for i in 0..<fftSize {
+                        let outIdx = start + i
+                        if outIdx < output.count {
+                            output[outIdx] += reconstructed[i]
+                            windowSum[outIdx] += window[i] * window[i]
+                        }
+                    }
                 }
             }
         }
