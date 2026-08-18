@@ -83,4 +83,36 @@ Deploys a dual-phased OS injection layer to offset heavy tensor-calculation lag 
   - Reconstructed via Overlap-Add (OLA) inverse FFT with synthesis window normalization.
 - **Execution Performance:** $< 2\text{ms}$ execution latency on Apple Silicon for 10-second audio clips with zero memory allocations during inference.
 
+---
+
+## 10. Hands-Free Conversation Engine & Rolling Lap Architecture
+
+```mermaid
+graph LR
+    A["Shift + Right Option<br/>(1st Tap Toggle)"] --> B["ConversationLapManager<br/>(5-Min Timer + Silence VAD)"]
+    B --> C["Floating Indicator<br/>(🟣 01 │ 04:28)"]
+    B -->|5:00 Interval| D["Flush Lap N Audio<br/>(conversation_..._partN.wav)"]
+    D --> E["Background Task<br/>Whisper Transcribe"]
+    B -->|2nd Tap or 60s Silence| F["Finalize & Close Session"]
+```
+
+### 10.1 `ConversationLapManager` State Machine
+- **Class Signature:** `final class ConversationLapManager: @unchecked Sendable`
+- **Default Parameters:**
+  - `lapDurationLimit: TimeInterval = 300.0` (5 minutes)
+  - `silenceTimeoutLimit: TimeInterval = 60.0` (1 minute)
+- **Rollover Evaluation:** Evaluated on every second clock tick via `evaluateLapRollover()`. When elapsed $\ge 300\text{s}$, dispatches `onLapRollover(completedLap, lapFrames)` on `@MainActor` and resets lap timestamp for Lap $N+1$.
+- **Storage Layout:**
+  - `~/.voicetyper/conversation/<YYYY-MM-DD>/audio/conversation_<timestamp>_<id>_part<N>.wav`
+  - `~/.voicetyper/conversation/<YYYY-MM-DD>/text/conversation_<timestamp>_<id>_part<N>.txt`
+
+### 10.2 Static Quality Gate Automation (`tests/verify_symbols.sh`)
+- Executed on Linux and macOS prior to test runs in `make test`.
+- Uses POSIX regex and AST scanning to validate:
+  - Framework imports (`Cocoa`, `Foundation`, `Accelerate`).
+  - Class property deduplication in `App.swift`.
+  - Memory exclusivity correctness on buffer pointers (`realPtr[k]` vs `real[k]`).
+  - Rejection of invalid temporary pointers in `DSPSplitComplex`.
+
+
 

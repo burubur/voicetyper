@@ -118,12 +118,57 @@ Power users, rapid typers, developers, and writers seeking an offline macOS spee
 - Duplicate or orphaned processes are automatically terminated on startup (`kill(oldPID, SIGTERM)`).
 
 ### 8.2 Unified Multi-Mode Switcher
-- **Smart Dual Mode (Default)**: `Right Option` triggers Direct Dictation (injected at cursor); `Shift + Right Option` triggers Conversation Capture (saved as date-grouped `.wav` + `.txt`).
+- **Smart Dual Mode (Default)**: `Right Option` triggers Direct Dictation (injected at cursor); `Shift + Right Option` triggers Hands-Free Conversation Capture (saved as date-grouped multi-part `.wav` + `.txt`).
 - **Direct Dictation Only**: Forces all hotkeys to type at the cursor.
 - **Conversation Capture Only**: Forces all hotkeys to record structured voice memos.
 
 ### 8.3 Zero-Sudo User-Space Upgrades
 - Binary installed to user-owned `$HOME/.local/bin/voicetyper` to completely eliminate `sudo` password prompts and terminal hangs during self-upgrades (`voicetyper upgrade`).
+- Self-upgrade renders ANSI Cyan FIGlet ASCII branding matching the unified developer tooling suite.
+
+---
+
+## 9. Hands-Free Conversation Capture & Rolling Laps Engine (`CONV-LAP-01`)
+
+### 9.1 Hands-Free Toggle Workflow (No Holding Required)
+- **1st Tap (`Shift + Right Option`)**: Starts conversation capture mode. The user can immediately release the keyboard and conduct long-form discussions, meetings, or voice memos hands-free.
+- **2nd Tap (`Shift + Right Option`)**: Wraps up and saves the conversation recording (protected by a 350ms debounce threshold to prevent accidental double-tap closures).
+- **Direct Dictation Coexistence**: Rapid inline typing (`Right Option` alone) remains **Hold-to-Talk**, ensuring zero friction for quick 3-second cursor dictations.
+
+### 9.2 Rolling 5-Minute Laps (Zero Memory Overflow)
+- **Chunking Interval**: Automatically rolls over every **5 minutes (300 seconds)** without interrupting active microphone capture.
+- **Part-Based Archiving**: Lap 1 flushes as `conversation_<timestamp>_part1.wav` + `part1.txt` and immediately begins background Whisper transcription. Lap 2 begins recording seamlessly in a fresh buffer.
+- **Data Safety**: Total RAM remains bounded at $< 40\text{MB}$ at all times. If power cuts or the laptop lid closes, all previous 5-minute segments are safely persisted to disk.
+
+### 9.3 1-Minute Silence Auto-Stop Safeguard
+- **Idle Silence Detection**: If ambient audio remains below threshold (RMS < 0.005) for **continuous 60 seconds (1 minute)**, VoiceTyper automatically concludes and saves the recording.
+- **Disk Protection**: Eliminates recording hours of empty room silence if the user walks away without stopping.
+
+### 9.4 Ultra-Compact Floating Pill Overlay
+- **Direct Dictation Mode**: Minimal 32x32px pulsing coral circle indicator.
+- **Conversation Mode**: Sleek 92x28px glassmorphic capsule:
+  ```text
+  ╭──────────────────╮
+  │  🟣 01  │  04:28 │
+  ╰──────────────────╯
+  ```
+  * `🟣`: Breathing neon purple pulsing dot (`#A855F7`) confirming live mic capture.
+  * `01`: 2-digit monospaced lap number (`01`, `02`, `03`...).
+  * `|`: 1px subtle translucent separator.
+  * `04:28`: Live ticking elapsed timer updating second-by-second.
+  * **Click-to-Stop**: Entire pill is clickable to immediately wrap up and save the recording.
+
+---
+
+## 10. Automated Swift Symbol & Exclusivity Quality Gates (`GATE-01`)
+
+### 10.1 Static AST & Exclusivity Gate (`tests/verify_symbols.sh`)
+- **Automated Execution**: Runs as the first quality gate in `make test` before compilation.
+- **Framework Import Verification**: Verifies `import Cocoa` and `import Foundation` across all AppKit and Darwin entrypoints.
+- **Duplicate Property Inspector**: Verifies zero duplicate `let`/`var` property declarations within class definitions.
+- **Swift Memory Exclusivity Guarantee**: Ensures all `withUnsafeMutableBufferPointer` blocks mutate pointers (`realPtr[k]`) rather than enclosing array variables (`real[k]`), preventing `#ExclusivityViolation` errors.
+- **Temporary Pointer Prevention**: Rejects raw inout `&array` arguments in struct initializers (`DSPSplitComplex`).
+
 
 
 
