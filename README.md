@@ -1,29 +1,28 @@
 # Voicetyper
 
-A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for fully **local, offline** speech recognition. Hold a key, speak, release — your transcribed text appears in whatever app is focused. No cloud APIs, no API keys, no internet required, choose the most suitable model for your needs.
+A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for fully **local, offline** speech recognition. Hold a key to type inline, or toggle hands-free conversation memos — your speech is transcribed natively on Apple Silicon without cloud APIs, subscription costs, or internet connectivity.
 
 ## How to Use
 
-1. **Install** the app.
-2. **Press and hold** the `Right Option` button.
-3. **Talk!** (Release to automatically type your text).
+1. **Direct Dictation**: Press and hold `Right Option` to speak, release to type at your cursor.
+2. **Hands-Free Conversation Memo**: Tap `Shift + Right Option` once to record meetings/brainstorms hands-free. Tap again to stop and archive raw audio WAV + text in `~/.voicetyper/conversation/`.
 
 ## Features
 
-- **Hold-to-Talk**: Hold `Right Option` to speak, release to transcribe and type.
+- **Direct Dictation (Hold-to-Talk)**: Hold `Right Option` to speak, release to transcribe and type directly at your cursor.
+- **Hands-Free Conversation Capture (Toggle)**: Tap `Shift + Right Option` once to talk hands-free; tap again to stop. Automatically segments recordings into **rolling 5-minute laps** to bound memory, and automatically stops on **1 minute of silence**.
+- **Native Classical Audio DSP**: 4th-order 80Hz Butterworth high-pass filter cuts 50/60Hz AC hum and laptop fan noise; vDSP spectral subtraction preserves natural vocal clarity.
+- **Dynamic Vocabulary Biasing**: Injects project glossary terms and code symbols directly into Whisper's prompt context to eliminate phoneme hallucinations on domain technical words.
 - **Grace Period**: Briefly pause mid-sentence (up to 800ms) without chopping your audio into separate chunks.
 - **Double-Tap Abort**: Rapidly double-tap `Right Option` within 300ms (or click the floating indicator) to silently discard the recording.
-- **Silence Rejection**: Automatically detects dead audio and drops the transaction — no accidental typing.
+- **Silence Rejection**: Automatically detects dead audio and drops the transaction — no accidental typing or blank files.
 - **Clipboard Preservation**: Borrows your clipboard for ~500ms to paste text, then restores your original clipboard contents.
-- **Transcription History Window**: Native macOS GUI window to view past transcriptions, trigger recording, and adjust settings.
-- **In-App Model Management**: Easily switch and auto-download Whisper models directly from the menu bar or History Window UI.
-- **Fully Offline**: Uses whisper.cpp locally — no Gemini, no OpenAI, no network calls.
-- **Pulsing Indicator**: An elegant floating microphone icon visually pulses at the bottom of your screen to clearly indicate active recording status.
-- **Animated Typing**: Injects a live `processing...` placeholder directly into your text field while the audio is being transcribed to provide instant visual feedback.
-- **Menu Bar App**: Shows a simple mic icon in your menu bar while running. (Note: the app runs via your terminal, where detailed 🔴 recording and ⏳ processing state indicators are logged).
+- **Transcription History Window**: Native macOS GUI window to view past transcriptions, trigger recording, and switch models.
+- **Single-Instance & Zero-Sudo Upgrades**: Automatically terminates stale instances on startup (`~/.voicetyper/voicetyper.pid`) and upgrades seamlessly in user-space (`voicetyper upgrade`).
+
 ## Prerequisites
 
-- macOS 13+ (Tested on Apple Silicon)
+- macOS 13+ (Tested on Apple Silicon / M-series)
 - Swift 6.0+
 - ~142MB disk space for the default whisper model
 
@@ -35,192 +34,85 @@ The easiest way to install VoiceTyper is via the automatic installation script. 
 curl -sSL https://raw.githubusercontent.com/burubur/voicetyper/main/install.sh | bash
 ```
 
-Alternatively, if you have already cloned the repository locally, you can simply run:
+Alternatively, if you have already cloned the repository locally:
 ```bash
 make install
 ```
 
-This will automatically check for prerequisites, clone the repository (if using curl), build the application, download the default `ggml-base.en.bin` whisper model, and securely install the binary into your `/usr/local/bin`.
+This installs the compiled binary to `~/.local/bin/voicetyper`, downloads the recommended model, and prepares the background agent.
 
 ### Running the App
 
-After installation, simply open your terminal and run:
+After installation, simply run:
 
 ```bash
 voicetyper
 ```
 
-*(Note: You must keep the terminal window open while using the app. It will run quietly in the background, showing a simple mic icon in your menu bar.)*
-
-### Uninstall
-
-If you ever wish to remove the installed app binary while keeping downloaded models, simply run:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/burubur/voicetyper/main/uninstall.sh | bash
-```
-
-Alternatively, if you cloned the repository locally, you can run:
-```bash
-make uninstall
-```
-
-To remove local build artifacts and downloaded whisper models, run:
-```bash
-make clean
-```
-
----
-
-## Manual Setup
-
-### 1. Download a Whisper Model
-
-Model files can be downloaded automatically via the menu bar dropdown or manually via script:
-
-```bash
-make download-models
-```
-
-Running this command will invoke the background script and automatically download **all available models**. The downloaded models will be located in the relative path: `~/.voicetyper/`, allowing you to test which one performs the best on your machine.
-
-If you prefer to preserve disk space, you can choose to download only a single model by passing its namespace exactly as shown directly to the bash script:
-
-```bash
-./download-models.sh ggml-tiny.en.bin            # ~75MB  — fastest, least accurate
-./download-models.sh ggml-base.en.bin            # ~142MB — good balance (recommended)
-./download-models.sh ggml-small.en.bin           # ~466MB — more accurate
-```
-
-### 2. Configuration (Optional)
-
-By default, VoiceTyper uses `ggml-base.en.bin`. Models can be selected directly inside the app menu/GUI or configured via environment variables.
-
-**For normal users:**
-Set the environment variable in your terminal before running the app:
-```bash
-export WHISPER_MODEL=ggml-small.en.bin
-voicetyper
-```
-Alternatively, write to macOS defaults so it persists:
-```bash
-defaults write VoiceTyper WHISPER_MODEL ggml-small.en.bin
-```
-
-**For developers (local build):**
-1. Create a file named `.xcconfig` inside the `voicetyper` root folder.
-2. Add your desired model name:
-```bash
-WHISPER_MODEL=ggml-base.en.bin
-```
-
-When you launch VoiceTyper, it will automatically search these configurations and load the appropriate model from `~/.voicetyper/`.
-
-### 3. Build & Run
-
-You must run VoiceTyper from your terminal, and **keep the terminal window open** while using it.
-
-For the best performance, build the "release" version and execute the resulting binary:
-
-```bash
-# 1. Compile the app
-swift build -c release
-
-# 2. Run the application from your terminal
-.build/release/VoiceTyper
-```
-
-*(Note: If you run just `swift build`, you must run `.build/debug/VoiceTyper` instead!)*
-
-### 3b. Development Mode (Auto-Reloading)
-
-If you are modifying the code and want the app to automatically recompile and restart whenever you save a file, you can use `watchexec`.
-
-1. Install `watchexec` via Homebrew:
-```bash
-brew install watchexec
-```
-2. Run this command in the project root:
-```bash
-make debug
-```
-Whenever you save a `.swift` file, the app will instantly terminate, re-compile, and re-launch!
-
-### 4. Grant Permissions
-
-On first launch, macOS will prompt for:
-- **Microphone Access**: Required to capture audio.
-- **Accessibility Access**: Required to monitor keyboard and inject text.
-
-Go to **System Settings > Privacy & Security** to grant both.
-
-## Usage
-
-By default, VoiceTyper runs entirely silently in your Mac's background. You will know it's active when you see the small mic icon in your top menu bar.
-
-If you specifically wish to see diagnostic logs, ML inference weights, and transcription stats, you can run the app manually in **Debug Mode**:
+To run in the foreground with verbose debug logging:
 ```bash
 voicetyper --debug
 ```
 
-### How to type:
-1. Click into any text field (editor, browser, chat app, etc.).
-2. **Hold `Right Option`** — a pulsing floating microphone appears at the bottom of your screen, recording begins, and the terminal logs a 🔴 recording state.
-3. **Speak normally** into your microphone.
-4. **Release `Right Option`** — the app types an animated `processing...` placeholder in your text field, whisper.cpp transcribes locally, and the terminal logs a ⏳ processing state.
-5. Once finished, the placeholder is deleted and your transcribed text is instantly injected.
+### Upgrading
 
-### Shortcuts
+To upgrade your live background installation to the latest source commit with zero `sudo` prompt:
+```bash
+voicetyper upgrade
+```
 
-| Action | Gesture |
-|--------|---------|
-| Record | Hold `Right Option` |
-| Pause & resume (grace period) | Release < 800ms, hold again |
-| Abort recording | Double-tap `Right Option` rapidly (< 300ms) or click floating indicator |
-| Force stop processing | Press `Ctrl + C` |
-| Show UI Window | Menu bar icon → "Show VoiceTyper" |
-| Quit | Menu bar icon → "Quit VoiceTyper" |
+### Uninstall
 
-## Troubleshooting
+```bash
+curl -sSL https://raw.githubusercontent.com/burubur/voicetyper/main/uninstall.sh | bash
+```
+Or locally:
+```bash
+make uninstall
+```
 
-- **No text is being typed (or only `processing...` appears):** macOS accessibility permissions can sometimes fail to register after an update. Go to **System Settings > Privacy & Security > Accessibility**, remove your terminal app (e.g., Terminal, iTerm) using the `-` button, and re-add it using the `+` button.
-- **Microphone not picking up audio:** Ensure you have granted Microphone permissions to your terminal app in **System Settings > Privacy & Security > Microphone**.
+---
+
+## Shortcuts
+
+| Action | Shortcut / Gesture | Behavior |
+|--------|-------------------|----------|
+| **Direct Dictation** | Hold `Right Option` | Speaks inline, pastes text at cursor on release |
+| **Conversation Memo** | Tap `Shift + Right Option` | **Hands-Free Toggle**: 1st tap starts, 2nd tap stops & saves WAV + text |
+| **Pause & Resume** | Release < 800ms, hold again | Grace period prevents splitting sentences |
+| **Abort Recording** | Double-tap `Right Option` (< 300ms) or click pill | Silently discards audio buffer |
+| **Force Stop Processing** | Press `Ctrl + C` | Instantly halts transcription animation and aborts |
+| **Show UI Window** | Menu bar icon → "Show VoiceTyper" | Opens past transcriptions and model settings |
+| **Quit** | Menu bar icon → "Quit VoiceTyper" | Terminates background agent cleanly |
+
+---
 
 ## Architecture
 
-### Components
-
 ```mermaid
 graph TD
-    %% Define components
-    App["App<br/>(Orchestrator)"]
-    KL["KeyboardListener<br/>(CGEvent Tap)"]
-    AR["AudioRecorder<br/>(AVAudioEngine)"]
-    WT["WhisperTranscriber<br/>(SwiftWhisper(whisper.cpp))"]
-    TI["TextInjector<br/>(Clipboard/CGEvent)"]
-    FRI["FloatingRecordingIndicator<br/>(NSWindow)"]
+    %% Components
+    App["App<br/>(Orchestrator & Mode Switcher)"]
+    KL["KeyboardListener<br/>(CGEvent Tap / Hands-Free Toggle)"]
+    AR["AudioRecorder<br/>(AVAudioEngine + VoiceProcessingIO)"]
+    DSP["AudioDSP<br/>(80Hz High-Pass + Spectral Subtraction)"]
+    LM["ConversationLapManager<br/>(5-Min Laps & 1-Min Silence VAD)"]
+    WT["WhisperTranscriber<br/>(SwiftWhisper / Dynamic Vocabulary)"]
+    TI["TextInjector<br/>(Clipboard / CGEvent)"]
+    CS["VoiceConversationStorage<br/>(~/.voicetyper/conversation/)"]
+    FRI["FloatingRecordingIndicator<br/>(Minimalist Pill: 🟣 01 │ 04:28)"]
     THW["TranscriptionHistoryWindowController<br/>(NSWindow / UI)"]
-    
-    %% External dependencies
-    Mic((Microphone))
-    KB((Keyboard))
-    Model[(ggml model)]
-    FocusedApp((Focused App))
 
-    %% Data flow
-    KB -- "Right Option events" --> KL
-    KL -- "Delegate:<br/>On Start/Stop/Abort" --> App
-    
-    App -- "show() / hide() / onAbort" --> FRI
-    App -- "showWindow() / history items" --> THW
-    App -- "startRecording()" --> AR
-    Mic -- "Raw audio" --> AR
-    AR -- "[Float] 16kHz PCM" --> App
-    
-    App -- "transcribe(frames)" --> WT
-    Model -. "weights / auto-download" .-> WT
-    WT -- "String" --> App
-    
-    App -- "animated processing... / injectText(String)" --> TI
-    TI -- "CGEvent typing / Cmd+V" --> FocusedApp
+    %% Flow
+    KL -- "Direct (Hold) / Memo (Toggle)" --> App
+    App -- "Show / Hide / Lap Count" --> FRI
+    App -- "Start / Stop" --> AR
+    AR -- "Raw 16kHz PCM" --> DSP
+    DSP -- "Sanitized Audio" --> App
+    App -- "Rolling 5m Laps" --> LM
+    LM -- "Flush Part N" --> CS
+    App -- "Transcribe Sanitized Audio" --> WT
+    WT -- "Transcribed Text" --> TI
+    WT -- "Archive Text" --> CS
+    App -- "History Entries" --> THW
 ```

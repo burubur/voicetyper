@@ -5,6 +5,8 @@
 - [x] **Plan 1 — Change Hotkey from Right Shift to Right Option** *(Priority: 🔴 High)*
 - [x] **Plan 2 — Hands-Free Voice Memory Logging (`Shift + Right Option`) & Local Conversation Archiving** *(Priority: 🟡 Medium)*
 - [x] **Plan 3 — Context-Aware Dynamic Vocabulary Injection via Memory Graph** *(Priority: 🟢 Low/Medium)*
+- [x] **Plan 4 — Native Classical Audio DSP Noise Sanitization (80Hz Butterworth + Spectral Subtraction)** *(Priority: 🔴 High)*
+- [x] **Plan 5 — Hands-Free Conversation Capture, Rolling 5-Minute Laps & 1-Minute Silence Auto-Stop** *(Priority: 🔴 High)*
 
 ---
 
@@ -82,3 +84,36 @@
 - Query active domain vocabulary from `memory` (e.g. OpenSCAD primitives `minkowski`, `translate`, `difference`; civil engineering terms `west_elevation`, `trench_z0`; DDD terms `aggregates`, `value_objects`).
 - Pass extracted terminology into `whisper.cpp`'s initial prompt context buffer (`--prompt` token biasing) during model initialization or session start.
 - Significantly improves transcription accuracy of code symbols, architecture jargon, and geodesy terms without requiring model fine-tuning or internet connectivity.
+
+---
+
+# Plan 4 — Native Classical Audio DSP Noise Removal
+
+## 1) Task Summary
+- Module: `Sources/VoiceTyper/AudioDSP.swift`
+- Goal: Implement real-time Apple Accelerate vDSP 4th-order 80Hz Butterworth high-pass filter and stationary spectral subtraction to eliminate 50/60Hz mains hum, keyboard clicks, and fan noise before Whisper inference.
+- Type: Audio DSP Engine
+- Priority: High
+
+## 2) Scope & Acceptance
+- Cascaded biquad IIR filter attenuates frequencies $<80\text{Hz}$ with $-24\text{dB/octave}$ slope.
+- Real-to-complex FFT with Hann windowing, noise floor estimation, and spectral subtraction ($\alpha = 0.75, \beta = 0.05$).
+- Reconstructs clean signal via Overlap-Add (OLA) in $<2\text{ms}$.
+- Verified against unit tests (`AudioDSPTests.swift`) and real-world audio memo samples.
+
+---
+
+# Plan 5 — Hands-Free Conversation Capture, Rolling Laps & Silence Auto-Stop
+
+## 1) Task Summary
+- Module: `ConversationLapManager.swift`, `KeyboardListener.swift`, `FloatingRecordingIndicator.swift`
+- Goal: Support hands-free toggle recording for long conversations with 5-minute rolling chapter segmentation, 1-minute silence auto-stop, and an ultra-compact minimalist floating pill.
+- Type: UX & Core Engine
+- Priority: High
+
+## 2) Scope & Acceptance
+- 1st tap on `Shift + Right Option` starts hands-free recording; 2nd tap stops & saves.
+- Automatic 5-minute rollover flushes Lap $N$ to `conversation_<timestamp>_<id>_partN.wav`, kicks off background transcription, and continues Lap $N+1$ recording seamlessly.
+- Continuous 60s silence (RMS < 0.005) automatically concludes session to protect storage.
+- Floating indicator renders minimal 92x28px pill (`🟣 01 │ 04:28`).
+- Static AST quality gate `tests/verify_symbols.sh` integrated into `make test`.

@@ -80,16 +80,55 @@ Click into any text editor (even a blank document) to begin testing.
 - The technical terms `minkowski`, `OpenSCAD`, and `Bouwplank` appear with exact casing and spelling rather than phonetic corruptions (e.g. not *"men cow ski"* or *"open scab"*).
 - When holding the hotkey in complete silence, no injected prompt keywords are leaked or pasted into the active text field.
 
-## Scenario 9: Voice Conversation Note Archiving (`Shift + Right Option`)
-**Goal:** Verify that holding `Shift + Right Option` records a voice conversation memo, saves the raw audio WAV to `~/.voicetyper/conversation/audio/`, and saves the transcribed text to `~/.voicetyper/conversation/text/` without injecting text into the active cursor.
+## Scenario 9: Hands-Free Voice Conversation Note Archiving (`Shift + Right Option`)
+**Goal:** Verify that tapping `Shift + Right Option` once starts hands-free recording, floating indicator displays minimal pill (`🟣 01 │ 00:00`), and a second tap saves the memo without typing at the cursor.
 **Action:**
 1. Focus any text field with existing text.
-2. Hold `Shift + Right Option`. The floating indicator turns purple with a brain icon (`🧠 🔴`).
-3. Speak:
+2. Tap `Shift + Right Option` once and release your fingers.
+3. Observe the floating indicator at the bottom center: it appears as a sleek glassmorphic pill with breathing purple dot `🟣`, lap badge `01`, and live ticking timer `00:01`, `00:02`...
+4. Speak naturally:
 > "Decision: We are standardizing all civil CAD diagrams on OpenSCAD and Three.js runtime."
-4. Release the keys.
+5. Tap `Shift + Right Option` a second time (or click the floating pill).
 **Expected result:**
-- The active cursor and text field are **not** typed into (no clipboard pasting occurs).
-- Raw audio is saved to `~/.voicetyper/conversation/audio/conversation_<timestamp>_<id>.wav`.
-- Transcribed text is saved to `~/.voicetyper/conversation/text/conversation_<timestamp>_<id>.txt`.
-- Transcription History window logs the entry with `🧠 [Vault Memo]`.
+- The active cursor is **not** typed into (no clipboard injection).
+- Raw audio is saved to `~/.voicetyper/conversation/<YYYY-MM-DD>/audio/conversation_<timestamp>_<id>_part1.wav`.
+- Transcribed text is saved to `~/.voicetyper/conversation/<YYYY-MM-DD>/text/conversation_<timestamp>_<id>_part1.txt`.
+- History window logs the entry with `🧠 [Part 1]`.
+
+## Scenario 10: Rolling 5-Minute Lap Rollover
+**Goal:** Verify that long-form conversations automatically segment every 5 minutes (`300s`) into consecutive parts without dropping audio frames.
+**Action:**
+1. Start hands-free capture via `Shift + Right Option`.
+2. Allow recording to run past the 5-minute mark (or simulate in unit test `ConversationLapManagerTests`).
+**Expected result:**
+- At 05:00, the floating pill flips to `🟣 02 │ 00:00`.
+- Part 1 (`_part1.wav`) is written to disk and queued for background transcription.
+- Part 2 continues capturing audio in a fresh buffer without interrupting the microphone.
+
+## Scenario 11: 1-Minute Silence Auto-Stop Safeguard
+**Goal:** Verify that if the user walks away without stopping, continuous silence for 60 seconds automatically concludes the session.
+**Action:**
+1. Start hands-free capture via `Shift + Right Option`.
+2. Speak a quick sentence, then remain completely silent for 65 seconds.
+**Expected result:**
+- At 60 seconds of continuous silence, VoiceTyper triggers `onSilenceTimeout`.
+- The session automatically closes, writes the audio and text to disk, and hides the floating pill.
+- Prevents overnight recording of empty rooms.
+
+## Scenario 12: Native Audio DSP Noise Removal
+**Goal:** Verify that background electrical hum (<80Hz) and ambient fan noise are filtered before Whisper inference.
+**Action:**
+1. Run in an environment with laptop cooling fan or background AC hum.
+2. Hold `Right Option` and dictate a short sentence.
+**Expected result:**
+- Audio is processed through the 4th-order 80Hz Butterworth filter and Accelerate vDSP spectral subtraction in $<2\text{ms}$.
+- Transcription does not hallucinate pause tokens (e.g. `[Music]`, `Thank you`).
+- Unit test `AudioDSPTests` confirms $>15\text{dB}$ attenuation on 60Hz hum.
+
+## Scenario 13: Swift Symbol, Import & Memory Exclusivity Gate (`make test`)
+**Goal:** Verify that static AST syntax, imports, and buffer memory exclusivity are verified before any commit is pushed.
+**Action:**
+1. Run `make test` from repository root.
+**Expected result:**
+- `tests/verify_symbols.sh` runs as Step 1, validating all framework imports (`Cocoa`, `Foundation`), property deduplication in `App.swift`, and buffer pointer exclusivity (`realPtr[k]` vs `real[k]`).
+- Full unit test suite and sandbox installation test suite pass with exit code `0`.
