@@ -15,6 +15,7 @@ final class App: NSObject, NSApplicationDelegate {
     private let lapManager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
     private var lapTimer: Timer?
     private let historyWindowController = TranscriptionHistoryWindowController()
+    private let trayPopover = TrayPopoverController()
     private var transcriber: Transcriber?
     private var activeVocabulary: [String] = []
 
@@ -140,10 +141,53 @@ final class App: NSObject, NSApplicationDelegate {
         }
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.timeStyle = .short
+        return df
+    }()
+
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateIcon(symbol: "mic")
-        rebuildMenuBar()
+
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(statusBarButtonClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+
+        trayPopover.onModeChanged = { [weak self] newMode in
+            self?.activeMode = newMode
+        }
+
+        trayPopover.onModelSelected = { [weak self] filename in
+            self?.switchModel(filename: filename)
+        }
+
+        trayPopover.onOpenHistory = { [weak self] in
+            self?.showHistoryWindow()
+        }
+
+        trayPopover.onOpenVault = { [weak self] in
+            self?.openConversationsFolder()
+        }
+
+        trayPopover.onQuit = { [weak self] in
+            self?.quitApp()
+        }
+    }
+
+    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp {
+            rebuildMenuBar()
+            statusItem.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+        } else {
+            statusItem.menu = nil
+            trayPopover.updateActiveMode(activeMode)
+            trayPopover.toggle(relativeTo: sender)
+        }
     }
 
     private func rebuildMenuBar() {
@@ -213,6 +257,12 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    @objc private func openConversationsFolder() {
+        let dir = conversationStorage.dayDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
     }
 
     @objc private func modeMenuItemClicked(_ sender: NSMenuItem) {
@@ -471,6 +521,10 @@ final class App: NSObject, NSApplicationDelegate {
                     self.historyWindowController.appendTranscription(text)
                     // Append trailing space so consecutive dictations don't merge
                     self.textInjector.injectText(text + " ")
+                    self.trayPopover.updateRecentTranscription(
+                        text: text,
+                        details: "🔴 Direct Dictation • \(Self.timeFormatter.string(from: Date()))"
+                    )
                 } else {
                     let lapIndex = lap ?? self.lapManager.currentLap
                     print("🧠 Archiving voice conversation note (Part \(lapIndex)): \(text)")
@@ -484,8 +538,13 @@ final class App: NSObject, NSApplicationDelegate {
                         print("❌ Failed to archive voice conversation note: \(error)")
                     }
                     self.historyWindowController.appendTranscription("🧠 [Part \(lapIndex)] " + text)
+                    self.trayPopover.updateRecentTranscription(
+                        text: text,
+                        details: "🟣 Memo (Part \(lapIndex)) • \(Self.timeFormatter.string(from: Date()))"
+                    )
                 }
 
+                self.trayPopover.updateStatus(text: "Ready", color: .systemGreen)
                 self.updateIcon(symbol: "mic")
 
             } catch {
@@ -493,6 +552,7 @@ final class App: NSObject, NSApplicationDelegate {
                     await self.textInjector.stopProcessingAnimation()
                 }
                 print("❌ Transcription error: \(error)")
+                self.trayPopover.updateStatus(text: "Ready", color: .systemGreen)
                 self.updateIcon(symbol: "mic")
             }
         }
@@ -522,6 +582,10 @@ final class App: NSObject, NSApplicationDelegate {
                     print("❌ Failed to archive Lap \(lap): \(error)")
                 }
                 self.historyWindowController.appendTranscription("🧠 [Part \(lap)] " + text)
+                self.trayPopover.updateRecentTranscription(
+                    text: text,
+                    details: "🟣 Memo (Part \(lap)) • \(Self.timeFormatter.string(from: Date()))"
+                )
             } catch {
                 print("❌ Lap \(lap) transcription error: \(error)")
             }
@@ -679,6 +743,10 @@ extension App: KeyboardListenerDelegate {
         }
 
         FloatingRecordingIndicator.shared.show(mode: mode, lap: mode == .memoryVault ? lapManager.currentLap : 1)
+        trayPopover.updateStatus(
+            text: (mode == .memoryVault) ? "Recording Memo (Lap \(lapManager.currentLap))..." : "Recording Direct...",
+            color: (mode == .memoryVault) ? .systemPurple : .systemRed
+        )
 
         do {
             try audioRecorder.startRecording()
@@ -690,6 +758,7 @@ extension App: KeyboardListenerDelegate {
         } catch {
             print("❌ Failed to start recording: \(error)")
             updateIcon(symbol: "mic")
+            trayPopover.updateStatus(text: "Ready", color: .systemGreen)
         }
     }
 
@@ -702,6 +771,7 @@ extension App: KeyboardListenerDelegate {
 
         historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
+        trayPopover.updateStatus(text: "Transcribing audio...", color: .systemOrange)
         processRecording(mode: mode, lap: (mode == .memoryVault) ? finalLap : nil)
     }
 
@@ -717,6 +787,7 @@ extension App: KeyboardListenerDelegate {
             historyWindowController.setRecording(false)
             FloatingRecordingIndicator.shared.hide()
             updateIcon(symbol: "mic")
+            trayPopover.updateStatus(text: "Ready", color: .systemGreen)
             print("🚫 Aborted. Dictation discarded.")
         }
     }
