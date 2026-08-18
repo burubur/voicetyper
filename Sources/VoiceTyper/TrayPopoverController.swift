@@ -1,4 +1,4 @@
-import AppKit
+import Cocoa
 import Foundation
 
 /// Unified macOS Menu Bar Tray Popover Controller.
@@ -39,6 +39,7 @@ final class TrayPopoverController: NSObject {
     private func setupPopover() {
         popover.behavior = .transient
         popover.animates = true
+        popover.contentSize = NSSize(width: 360, height: 420)
 
         let container = NSVisualEffectView()
         container.material = .popover
@@ -367,7 +368,7 @@ final class TrayPopoverController: NSObject {
         guard !lastTranscriptionText.isEmpty else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(lastTranscriptionText, forType: .string)
+        _ = pb.setString(lastTranscriptionText, forType: .string)
     }
 
     @objc private func historyClicked() {
