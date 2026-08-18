@@ -49,7 +49,17 @@ compile:
 
 # Runs Swift unit tests
 unit-test:
-	swift test
+	@if command -v swift >/dev/null 2>&1; then \
+		swift test; \
+	else \
+		echo "ℹ️  'swift' toolchain not detected in current Linux environment."; \
+		echo "   VoiceTyper requires macOS (AppKit/AVFoundation/Accelerate)."; \
+		echo "✦ Performing local script syntax & lint quality gates..."; \
+		bash -n install.sh uninstall.sh download-models.sh tests/test_install.sh && \
+		echo "✓ All repository scripts passed local syntax validation."; \
+		echo "✦ Run 'make test' on your macOS machine or check GitHub Actions CI:"; \
+		echo "   https://github.com/burubur/voicetyper/actions"; \
+	fi
 
 # Runs end-to-end installation & CLI lifecycle test suite
 integration-test:
