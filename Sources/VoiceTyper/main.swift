@@ -1,16 +1,4 @@
-import Cocoa
-
-let banner = """
- __      __  _           _______                     
- \\ \\    / / (_)         |__   __|                    
-  \\ \\  / /__ _  ___ ___    | |_   _ _ __   ___ _ __ 
-   \\ \\/ / _ \\ |/ __/ _ \\   | | | | | '_ \\ / _ \\ '__|
-    \\  / (_) | | (_|  __/   | | |_| | |_) |  __/ |   
-     \\/ \\___/|_|\\___\\___|   |_|\\__, | .__/ \\___|_|   
-                                __/ | |              
-                               |___/|_|              
-VoiceTyper — Native macOS Offline Voice-to-Text Dictation
-"""
+let banner = UpgradeManager.banner
 
 let args = CommandLine.arguments
 

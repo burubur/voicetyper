@@ -6,6 +6,19 @@ public final class UpgradeManager: Sendable {
 
     public static let currentVersion = "v0.5.0"
 
+    public static let banner = """
+\u{001B}[1m\u{001B}[36m __      __  _           _______                     
+ \\ \\    / / (_)         |__   __|                    
+  \\ \\  / /__ _  ___ ___    | |_   _ _ __   ___ _ __ 
+   \\ \\/ / _ \\ |/ __/ _ \\   | | | | | '_ \\ / _ \\ '__|
+    \\  / (_) | | (_|  __/   | | |_| | |_) |  __/ |   
+     \\/ \\___/|_|\\___\\___|   |_|\\__, | .__/ \\___|_|   
+                                __/ | |              
+                               |___/|_|              \u{001B}[0m
+\u{001B}[1mNative macOS Offline Voice Dictation & Conversation Vault\u{001B}[0m
+\u{001B}[36mRepository: https://github.com/burubur/voicetyper\u{001B}[0m
+"""
+
     public static var voicetyperHome: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".voicetyper")
     }
@@ -120,6 +133,7 @@ public final class UpgradeManager: Sendable {
 
     /// Executes the self-upgrade sequence.
     public static func runUpgrade(noPull: Bool = false, customSourceDir: String? = nil) {
+        Swift.print(banner)
         Swift.print("✦ VOICETYPER SELF-UPGRADE")
         Swift.print("───────────────────────────────────────────────────────────────────────────")
 
