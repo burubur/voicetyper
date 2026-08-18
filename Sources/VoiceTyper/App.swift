@@ -13,11 +13,11 @@ public enum ActiveMode: String, CaseIterable, Sendable {
     var displayName: String {
         switch self {
         case .smartDual:
-            return "Smart Dual (Right Option: Dictate | Shift+Option: Memo)"
+            return "Smart Dual (⌥ Direct / ⇧⌥ Memo)"
         case .directOnly:
-            return "Direct Dictation Only (Type at Cursor)"
+            return "Direct Dictation Only (⌥)"
         case .conversationOnly:
-            return "Conversation Capture Only (Save Audio & Text)"
+            return "Hands-Free Memo Only (⇧⌥)"
         }
     }
 }
@@ -32,7 +32,6 @@ final class App: NSObject, NSApplicationDelegate {
     private let lapManager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
     private var lapTimer: Timer?
     private let historyWindowController = TranscriptionHistoryWindowController()
-    private let trayPopover = TrayPopoverController()
     private var transcriber: Transcriber?
     private var activeVocabulary: [String] = []
 
@@ -156,84 +155,55 @@ final class App: NSObject, NSApplicationDelegate {
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         updateIcon(symbol: "mic")
-
-        if let button = statusItem.button {
-            button.target = self
-            button.action = #selector(statusBarButtonClicked(_:))
-            _ = button.sendAction(on: NSEvent.EventTypeMask([.leftMouseUp, .rightMouseUp]))
-        }
-
-        trayPopover.onModeChanged = { [weak self] newMode in
-            self?.activeMode = newMode
-        }
-
-        trayPopover.onModelSelected = { [weak self] filename in
-            self?.switchModel(filename: filename)
-        }
-
-        trayPopover.onOpenHistory = { [weak self] in
-            self?.showHistoryWindow()
-        }
-
-        trayPopover.onOpenVault = { [weak self] in
-            self?.openConversationsFolder()
-        }
-
-        trayPopover.onQuit = { [weak self] in
-            self?.quitApp()
-        }
-    }
-
-    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent
-        if event?.type == .rightMouseUp {
-            let menu = buildContextMenu()
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
-        } else {
-            trayPopover.updateActiveMode(activeMode)
-            trayPopover.toggle(relativeTo: sender)
-        }
+        rebuildMenuBar()
     }
 
     private func rebuildMenuBar() {
-        // Kept for backward compatibility if needed by model switchers
+        let menu = buildNativeMenu()
+        statusItem.menu = menu
     }
 
-    private func buildContextMenu() -> NSMenu {
+    private func buildNativeMenu() -> NSMenu {
         let menu = NSMenu()
         let currentModel = WhisperTranscriber.configuredModelFilename
-        let currentOption = WhisperTranscriber.availableModels.first { $0.filename.lowercased() == currentModel.lowercased() }
-        let modelTitle = currentOption?.displayName ?? currentModel
 
-        var headerTitle = "VoiceTyper (\(modelTitle))"
-        if !downloadingModels.isEmpty {
-            headerTitle += " — Downloading..."
-        }
-
-        let titleItem = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
+        // Header: Version & Active Model
+        let titleItem = NSMenuItem(title: "VoiceTyper v\(UpgradeManager.currentVersion)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
+
         menu.addItem(NSMenuItem.separator())
 
-        // Active Mode Selection Section
-        let modeHeader = NSMenuItem(title: "Capture Mode:", action: nil, keyEquivalent: "")
+        // Section 1: Top Actions (History & Vault)
+        let historyItem = NSMenuItem(title: "Show Transcription History", action: #selector(showHistoryWindow), keyEquivalent: "h")
+        historyItem.keyEquivalentModifierMask = [.command]
+        historyItem.target = self
+        menu.addItem(historyItem)
+
+        let vaultItem = NSMenuItem(title: "Open Daily Vault Folder", action: #selector(openConversationsFolder), keyEquivalent: "")
+        vaultItem.target = self
+        menu.addItem(vaultItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Section 2: Mode Selection
+        let modeHeader = NSMenuItem(title: "Mode:", action: nil, keyEquivalent: "")
         modeHeader.isEnabled = false
         menu.addItem(modeHeader)
 
         for mode in ActiveMode.allCases {
-            let item = NSMenuItem(title: "  " + mode.displayName, action: #selector(modeMenuItemClicked(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: mode.displayName, action: #selector(modeMenuItemClicked(_:)), keyEquivalent: "")
             item.target = self
+            item.indentationLevel = 1
             item.representedObject = mode.rawValue
             item.state = (mode == activeMode) ? .on : .off
             menu.addItem(item)
         }
 
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Show VoiceTyper Window", action: #selector(showHistoryWindow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Open Conversations in Finder...", action: #selector(openConversationsFolder), keyEquivalent: ""))
 
-        // Model selection submenu
-        let modelSubmenu = NSMenu(title: "Select Model")
+        // Section 3: Select Whisper Model Flyout Submenu & System Actions
+        let modelSubmenu = NSMenu(title: "Select Whisper Model")
         for option in WhisperTranscriber.availableModels {
             let isCurrent = option.filename.lowercased() == currentModel.lowercased()
             let isDownloaded = WhisperTranscriber.isModelDownloaded(filename: option.filename)
@@ -251,6 +221,7 @@ final class App: NSObject, NSApplicationDelegate {
 
             let item = NSMenuItem(title: itemTitle, action: #selector(modelSubmenuItemClicked(_:)), keyEquivalent: "")
             item.target = self
+            item.indentationLevel = 1
             item.representedObject = option.filename
             item.state = isCurrent ? .on : .off
             if isDownloading {
@@ -264,8 +235,35 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(modelSubmenuItem)
 
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q"))
+
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+
+        let quitItem = NSMenuItem(title: "Quit VoiceTyper", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.keyEquivalentModifierMask = [.command]
+        quitItem.target = self
+        menu.addItem(quitItem)
+
         return menu
+    }
+
+    @objc private func checkForUpdates() {
+        Task {
+            let result = await UpgradeManager.shared.checkForUpdates()
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.messageText = "VoiceTyper Updates"
+                if result.hasUpdate {
+                    alert.informativeText = "A new version of VoiceTyper is available (\(result.remoteVersion)).\nRun 'voicetyper upgrade' in your terminal to update."
+                    alert.alertStyle = .informational
+                } else {
+                    alert.informativeText = "You are on the latest version (\(UpgradeManager.currentVersion))."
+                    alert.alertStyle = .informational
+                }
+                alert.runModal()
+            }
+        }
     }
 
     @objc private func openConversationsFolder() {
@@ -524,10 +522,6 @@ final class App: NSObject, NSApplicationDelegate {
                     self.historyWindowController.appendTranscription(text)
                     // Append trailing space so consecutive dictations don't merge
                     self.textInjector.injectText(text + " ")
-                    self.trayPopover.updateRecentTranscription(
-                        text: text,
-                        details: "🔴 Direct Dictation • \(Self.timeFormatter.string(from: Date()))"
-                    )
                 } else {
                     let lapIndex = lap ?? self.lapManager.currentLap
                     print("🧠 Archiving voice conversation note (Part \(lapIndex)): \(text)")
@@ -541,13 +535,8 @@ final class App: NSObject, NSApplicationDelegate {
                         print("❌ Failed to archive voice conversation note: \(error)")
                     }
                     self.historyWindowController.appendTranscription("🧠 [Part \(lapIndex)] " + text)
-                    self.trayPopover.updateRecentTranscription(
-                        text: text,
-                        details: "🟣 Memo (Part \(lapIndex)) • \(Self.timeFormatter.string(from: Date()))"
-                    )
                 }
 
-                self.trayPopover.updateStatus(text: "Ready", color: .systemGreen)
                 self.updateIcon(symbol: "mic")
 
             } catch {
@@ -555,7 +544,6 @@ final class App: NSObject, NSApplicationDelegate {
                     await self.textInjector.stopProcessingAnimation()
                 }
                 print("❌ Transcription error: \(error)")
-                self.trayPopover.updateStatus(text: "Ready", color: .systemGreen)
                 self.updateIcon(symbol: "mic")
             }
         }
@@ -585,10 +573,6 @@ final class App: NSObject, NSApplicationDelegate {
                     print("❌ Failed to archive Lap \(lap): \(error)")
                 }
                 self.historyWindowController.appendTranscription("🧠 [Part \(lap)] " + text)
-                self.trayPopover.updateRecentTranscription(
-                    text: text,
-                    details: "🟣 Memo (Part \(lap)) • \(Self.timeFormatter.string(from: Date()))"
-                )
             } catch {
                 print("❌ Lap \(lap) transcription error: \(error)")
             }
@@ -746,10 +730,6 @@ extension App: KeyboardListenerDelegate {
         }
 
         FloatingRecordingIndicator.shared.show(mode: mode, lap: mode == .memoryVault ? lapManager.currentLap : 1)
-        trayPopover.updateStatus(
-            text: (mode == .memoryVault) ? "Recording Memo (Lap \(lapManager.currentLap))..." : "Recording Direct...",
-            color: (mode == .memoryVault) ? .systemPurple : .systemRed
-        )
 
         do {
             try audioRecorder.startRecording()
@@ -761,7 +741,6 @@ extension App: KeyboardListenerDelegate {
         } catch {
             print("❌ Failed to start recording: \(error)")
             updateIcon(symbol: "mic")
-            trayPopover.updateStatus(text: "Ready", color: .systemGreen)
         }
     }
 
@@ -774,7 +753,6 @@ extension App: KeyboardListenerDelegate {
 
         historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
-        trayPopover.updateStatus(text: "Transcribing audio...", color: .systemOrange)
         processRecording(mode: mode, lap: (mode == .memoryVault) ? finalLap : nil)
     }
 
@@ -790,7 +768,6 @@ extension App: KeyboardListenerDelegate {
             historyWindowController.setRecording(false)
             FloatingRecordingIndicator.shared.hide()
             updateIcon(symbol: "mic")
-            trayPopover.updateStatus(text: "Ready", color: .systemGreen)
             print("🚫 Aborted. Dictation discarded.")
         }
     }
