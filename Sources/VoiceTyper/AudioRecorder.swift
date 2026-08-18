@@ -28,6 +28,11 @@ final class AudioRecorder: @unchecked Sendable {
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
+        // Enable Apple Voice Processing DSP IO if available on macOS
+        if #available(macOS 13.0, *) {
+            try? inputNode.setVoiceProcessingEnabled(true)
+        }
+
         // Install a tap to capture audio buffers
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, inputSampleRate: inputFormat.sampleRate)
@@ -38,8 +43,8 @@ final class AudioRecorder: @unchecked Sendable {
         isRecording = true
     }
 
-    /// Stops recording and returns the captured audio as 16kHz mono PCM floats.
-    /// - Returns: Array of Float samples at 16kHz, suitable for whisper.cpp.
+    /// Stops recording and returns the captured audio as cleaned 16kHz mono PCM floats.
+    /// - Returns: Array of Float samples at 16kHz with DSP noise suppression applied.
     func stopRecording() -> [Float] {
         guard isRecording else { return [] }
 
@@ -52,7 +57,9 @@ final class AudioRecorder: @unchecked Sendable {
         audioFrames.removeAll()
         lock.unlock()
 
-        return captured
+        // Apply Classical DSP Noise Reduction (80Hz High-Pass Filter + Stationary Spectral Subtraction)
+        let cleaned = AudioDSP.denoise(captured, sampleRate: targetSampleRate)
+        return cleaned
     }
 
     // MARK: - Private
