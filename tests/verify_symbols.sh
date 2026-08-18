@@ -153,8 +153,9 @@ import os, re, sys
 root_dir = sys.argv[1]
 sources_dir = os.path.join(root_dir, "Sources", "VoiceTyper")
 
-# Pass 1: Build symbol index of all internal types and their members
+# Pass 1: Build symbol index of all internal types, their members, and access levels
 type_members = {}  # { "TypeName": { "methodName", "propertyName", "shared", ... } }
+type_private_members = {} # { "TypeName": { "privateMethod", "privateProp" } }
 type_declarations = {} # { "TypeName": "File.swift" }
 
 for fname in sorted(os.listdir(sources_dir)):
@@ -178,6 +179,7 @@ for fname in sorted(os.listdir(sources_dir)):
             type_name = m_type.group(4)
             if type_name not in type_members:
                 type_members[type_name] = set()
+                type_private_members[type_name] = set()
                 type_declarations[type_name] = fname
             type_stack.append((type_name, brace_depth))
         
@@ -187,14 +189,22 @@ for fname in sorted(os.listdir(sources_dir)):
         if type_stack:
             curr_type = type_stack[-1][0]
             # Match function
-            m_func = re.match(r'^\s*(@objc\s+)?(public\s+|private\s+|internal\s+)?(static\s+|class\s+)?func\s+([A-Za-z0-9_]+)', line)
+            m_func = re.match(r'^\s*(@objc\s+)?(public\s+|private\s+|internal\s+|fileprivate\s+)?(static\s+|class\s+)?func\s+([A-Za-z0-9_]+)', line)
             if m_func:
-                type_members[curr_type].add(m_func.group(4))
+                name = m_func.group(4)
+                type_members[curr_type].add(name)
+                vis = m_func.group(2) or ""
+                if "private" in vis or "fileprivate" in vis:
+                    type_private_members[curr_type].add(name)
                 
             # Match property
-            m_prop = re.match(r'^\s*(public\s+|private\s+|internal\s+)?(static\s+|class\s+)?(let|var)\s+([A-Za-z0-9_]+)', line)
+            m_prop = re.match(r'^\s*(public\s+|private\s+|internal\s+|fileprivate\s+)?(static\s+|class\s+)?(let|var)\s+([A-Za-z0-9_]+)', line)
             if m_prop:
-                type_members[curr_type].add(m_prop.group(4))
+                name = m_prop.group(4)
+                type_members[curr_type].add(name)
+                vis = m_prop.group(1) or ""
+                if "private" in vis or "fileprivate" in vis:
+                    type_private_members[curr_type].add(name)
                 
             # Match enum case
             m_case = re.match(r'^\s*case\s+([A-Za-z0-9_]+)', line)
@@ -205,7 +215,7 @@ for fname in sorted(os.listdir(sources_dir)):
         while type_stack and brace_depth <= type_stack[-1][1]:
             type_stack.pop()
 
-# Pass 2: Verify member calls on known internal types
+# Pass 2: Verify member calls on known internal types and access levels
 failures = 0
 for fname in sorted(os.listdir(sources_dir)):
     if not fname.endswith(".swift"):
@@ -214,23 +224,38 @@ for fname in sorted(os.listdir(sources_dir)):
     with open(fpath, "r", encoding="utf-8") as f:
         lines = f.readlines()
         
+    type_stack = []
+    brace_depth = 0
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
         if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
             continue
             
+        m_type = re.match(r'^\s*(final\s+)?(public\s+|private\s+|internal\s+)?(class|struct|actor|enum|protocol|extension)\s+([A-Za-z0-9_]+)', line)
+        if m_type:
+            type_stack.append((m_type.group(4), brace_depth))
+            
+        open_braces = line.count("{")
+        close_braces = line.count("}")
+        curr_enclosing = type_stack[-1][0] if type_stack else None
+            
         # Match <TypeName>.(shared\.)?<member>
         for type_name, members in type_members.items():
-            # e.g. UpgradeManager.shared.checkForUpdates or UpgradeManager.checkForUpdates
             pattern = rf'\b{type_name}\s*\.\s*(shared\s*\.\s*)?([a-zA-Z0-9_]+)'
             for m in re.finditer(pattern, line):
                 member = m.group(2)
-                # Ignore self-referential 'init', 'self', or rawValue
                 if member in ("self", "init", "rawValue", "allCases", "Type", "shared", "sharedInstance"):
                     continue
                 if member not in members:
                     print(f"❌ [{fname}:{i}] Type '{type_name}' (defined in {type_declarations[type_name]}) has no member '{member}'!")
                     failures += 1
+                elif member in type_private_members.get(type_name, set()) and curr_enclosing != type_name:
+                    print(f"❌ [{fname}:{i}] Member '{member}' of type '{type_name}' is private and cannot be called from '{curr_enclosing or fname}'!")
+                    failures += 1
+                    
+        brace_depth += (open_braces - close_braces)
+        while type_stack and brace_depth <= type_stack[-1][1]:
+            type_stack.pop()
 
 if failures > 0:
     sys.exit(1)

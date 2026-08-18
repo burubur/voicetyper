@@ -1253,7 +1253,7 @@ class IconButton: NSButton {
         refreshColors()
     }
 
-    private func refreshColors() {
+    func refreshColors() {
         contentTintColor = Palette.secondaryText
     }
 }
