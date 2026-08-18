@@ -17,7 +17,7 @@ private class ClickableContainerView: NSView {
 
 /// Floating recording indicator:
 /// - **Direct Transcription (.standard)**: 34x34px Pink/Coral Circle with centered breathing microphone icon.
-/// - **Conversation Capture (.memoryVault)**: 68x34px Purple Pill with breathing microphone on the left + Lap Counter (`01`, `02`) on the right.
+/// - **Conversation Capture (.memoryVault)**: 116x34px Purple Pill with breathing microphone on left, Lap Counter (`01`), and live Time Lapse (`04:28`) on right.
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -27,7 +27,11 @@ final class FloatingRecordingIndicator {
     private var pillLayer: CALayer?
     private var imageView: NSImageView?
     private var lapLabel: NSTextField?
+    private var timeLabel: NSTextField?
+    private var separatorView: NSView?
 
+    private var timer: Timer?
+    private var startTime: Date?
     private var currentLap: Int = 1
     private var activeMode: DictationMode = .standard
 
@@ -39,11 +43,12 @@ final class FloatingRecordingIndicator {
     func show(mode: DictationMode = .standard, lap: Int = 1) {
         self.activeMode = mode
         self.currentLap = lap
+        self.startTime = Date()
 
         let isMemo = (mode == .memoryVault)
         let activeBgColor = isMemo ? memoryPurple : standardCoral
 
-        let winWidth: CGFloat = isMemo ? 68.0 : 34.0
+        let winWidth: CGFloat = isMemo ? 116.0 : 34.0
         let winHeight: CGFloat = 34.0
 
         if window == nil {
@@ -91,14 +96,23 @@ final class FloatingRecordingIndicator {
         pulse.repeatCount = .infinity
         pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         pillLayer?.add(pulse, forKey: "recordingPulse")
+
+        if isMemo {
+            startTimer()
+        } else {
+            stopTimer()
+        }
     }
 
     func updateLap(_ lap: Int) {
         self.currentLap = lap
+        self.startTime = Date()
         lapLabel?.stringValue = String(format: "%02d", lap)
+        timeLabel?.stringValue = "00:00"
     }
 
     func hide() {
+        stopTimer()
         guard let window = self.window else { return }
 
         NSAnimationContext.runAnimationGroup { context in
@@ -142,18 +156,60 @@ final class FloatingRecordingIndicator {
         self.imageView = imgView
         pill.addSubview(imgView)
 
-        // 2. Lap Counter (Only for Conversation Mode on right side)
         if isMemo {
+            // 2. Lap Counter (e.g. 01, 02)
             let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
-            lap.frame = NSRect(x: 28, y: 6, width: 28, height: 18)
-            lap.font = .monospacedDigitSystemFont(ofSize: 13, weight: .bold)
+            lap.frame = NSRect(x: 27, y: 6, width: 22, height: 18)
+            lap.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
             lap.textColor = .white
             lap.alignment = .center
             self.lapLabel = lap
             pill.addSubview(lap)
+
+            // 3. Subtle 1px Divider
+            let sep = NSBox(frame: NSRect(x: 52, y: 8, width: 1, height: 14))
+            sep.boxType = .custom
+            sep.fillColor = NSColor.white.withAlphaComponent(0.35)
+            sep.borderWidth = 0
+            self.separatorView = sep
+            pill.addSubview(sep)
+
+            // 4. Live Ticking Time Lapse (00:00) exactly after lap counter
+            let time = NSTextField(labelWithString: "00:00")
+            time.frame = NSRect(x: 58, y: 6, width: 46, height: 18)
+            time.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+            time.textColor = .white
+            time.alignment = .center
+            self.timeLabel = time
+            pill.addSubview(time)
         }
 
         container.addSubview(pill)
+    }
+
+    // MARK: - Timer
+
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateTimerLabel()
+            }
+        }
+        updateTimerLabel()
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func updateTimerLabel() {
+        guard let startTime = startTime else { return }
+        let elapsed = Int(Date().timeIntervalSince(startTime))
+        let minutes = elapsed / 60
+        let seconds = elapsed % 60
+        timeLabel?.stringValue = String(format: "%02d:%02d", minutes, seconds)
     }
 
     /// Places the indicator at the bottom center of the active screen.
