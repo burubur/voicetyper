@@ -13,6 +13,7 @@ final class AudioRecorder: @unchecked Sendable {
     private var audioFrames: [Float] = []
     private let lock = NSLock()
     private(set) var isRecording = false
+    var onAudioLevel: (@Sendable (Float) -> Void)?
 
     private let targetSampleRate: Double = 16000.0
 
@@ -97,6 +98,15 @@ final class AudioRecorder: @unchecked Sendable {
         lock.lock()
         audioFrames.append(contentsOf: samples)
         lock.unlock()
+
+        // Calculate live RMS power for visualizer animation
+        var sumSquares: Float = 0
+        for sample in samples {
+            sumSquares += sample * sample
+        }
+        let rms = sqrt(sumSquares / Float(max(1, samples.count)))
+        let normalizedLevel = min(1.0, max(0.0, rms * 12.0))
+        onAudioLevel?(normalizedLevel)
     }
 
     /// Minimum number of audio frames to consider valid speech (~0.3s at 16kHz).

@@ -69,6 +69,12 @@ final class App: NSObject, NSApplicationDelegate {
             self?.keyboardListener.forceAbort()
         }
 
+        audioRecorder.onAudioLevel = { level in
+            Task { @MainActor in
+                FloatingRecordingIndicator.shared.updateAudioLevel(level)
+            }
+        }
+
         lapManager.onLapRollover = { [weak self] completedLap, lapFrames in
             guard let self else { return }
             Task { @MainActor in

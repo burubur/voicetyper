@@ -29,6 +29,8 @@ final class FloatingRecordingIndicator {
     private var lapLabel: NSTextField?
     private var timeLabel: NSTextField?
     private var separatorView: NSView?
+    private var barHeightConstraints: [NSLayoutConstraint] = []
+    private let baseBarHeights: [CGFloat] = [4.0, 8.0, 13.0, 9.0, 5.0]
 
     private var timer: Timer?
     private var startTime: Date?
@@ -115,8 +117,26 @@ final class FloatingRecordingIndicator {
         timeLabel?.stringValue = "00:00"
     }
 
+    func updateAudioLevel(_ level: Float) {
+        guard activeMode == .memoryVault, !barHeightConstraints.isEmpty else { return }
+
+        let multipliers: [CGFloat] = [6.0, 9.0, 7.0, 10.0, 6.0]
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.06
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            for (i, constraint) in barHeightConstraints.enumerated() {
+                let targetH = baseBarHeights[i] + CGFloat(level) * multipliers[i]
+                constraint.animator().constant = min(20.0, max(baseBarHeights[i], targetH))
+            }
+        }
+    }
+
     func hide() {
         stopTimer()
+        for (i, constraint) in barHeightConstraints.enumerated() {
+            constraint.constant = baseBarHeights[i]
+        }
         guard let window = self.window else { return }
 
         NSAnimationContext.runAnimationGroup { context in
@@ -232,7 +252,7 @@ final class FloatingRecordingIndicator {
         container.addSubview(pill)
     }
 
-    /// Creates a clean, minimal static voice bar consisting of 5 rounded micro-bars
+    /// Creates a clean, minimal voice bar consisting of 5 rounded micro-bars
     private func createStaticVoiceBar() -> NSView {
         let barStack = NSStackView()
         barStack.orientation = .horizontal
@@ -240,17 +260,19 @@ final class FloatingRecordingIndicator {
         barStack.spacing = 2
         barStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let heights: [CGFloat] = [4.0, 8.0, 13.0, 9.0, 5.0]
-        for h in heights {
+        barHeightConstraints.removeAll()
+        for h in baseBarHeights {
             let bar = NSView()
             bar.wantsLayer = true
             bar.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.85).cgColor
             bar.layer?.cornerRadius = 1.0
             bar.translatesAutoresizingMaskIntoConstraints = false
+            let heightConstraint = bar.heightAnchor.constraint(equalToConstant: h)
             NSLayoutConstraint.activate([
                 bar.widthAnchor.constraint(equalToConstant: 2),
-                bar.heightAnchor.constraint(equalToConstant: h)
+                heightConstraint
             ])
+            barHeightConstraints.append(heightConstraint)
             barStack.addArrangedSubview(bar)
         }
 
