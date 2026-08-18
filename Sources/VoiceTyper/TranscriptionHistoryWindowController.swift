@@ -710,6 +710,26 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
         }
     }
 
+    func deleteConversation(filename: String) {
+        guard let item = recordedConversations.first(where: { $0.filename == filename }) else { return }
+        
+        let alert = NSAlert()
+        alert.messageText = "Delete Voice Recording"
+        alert.informativeText = "Are you sure you want to delete '\(filename).wav' and its transcript note?"
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            try? FileManager.default.removeItem(at: item.wavURL)
+            if let txtURL = item.txtURL {
+                try? FileManager.default.removeItem(at: txtURL)
+            }
+            recordedConversations.removeAll { $0.filename == filename }
+            renderCards()
+        }
+    }
+
     private func renderCards() {
         cardsStack.arrangedSubviews.forEach { view in
             cardsStack.removeArrangedSubview(view)
@@ -741,7 +761,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
                 
                 NSLayoutConstraint.activate([
                     card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
-                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+                    card.heightAnchor.constraint(lessThanOrEqualToConstant: 160)
                 ])
             }
         } else {
@@ -759,6 +780,9 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
                     },
                     onPlay: { wavURL in
                         NSWorkspace.shared.open(wavURL)
+                    },
+                    onDelete: { [weak self] filename in
+                        self?.deleteConversation(filename: filename)
                     }
                 )
                 card.translatesAutoresizingMaskIntoConstraints = false
@@ -766,7 +790,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
 
                 NSLayoutConstraint.activate([
                     card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
-                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 110)
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+                    card.heightAnchor.constraint(lessThanOrEqualToConstant: 150)
                 ])
             }
         }
@@ -794,25 +819,29 @@ final class ConversationCardView: NSView {
     let item: RecordedConversationItem
     private let onOpenInFinder: (URL) -> Void
     private let onPlay: (URL) -> Void
+    private let onDelete: (String) -> Void
 
     private let titleLabel: NSTextField
     private let previewLabel: NSTextField
     private let dateBadge: NSTextField
     private let timeBadge: NSTextField
     private let sizeBadge: NSTextField
-    private let openButton: NSButton
-    private let playButton: NSButton
+    private let playButton: IconButton
+    private let openButton: IconButton
+    private let deleteButton: IconButton
 
     private var trackingArea: NSTrackingArea?
 
     init(
         item: RecordedConversationItem,
         onOpenInFinder: @escaping (URL) -> Void,
-        onPlay: @escaping (URL) -> Void
+        onPlay: @escaping (URL) -> Void,
+        onDelete: @escaping (String) -> Void
     ) {
         self.item = item
         self.onOpenInFinder = onOpenInFinder
         self.onPlay = onPlay
+        self.onDelete = onDelete
 
         self.titleLabel = NSTextField(labelWithString: item.filename + ".wav")
         self.previewLabel = NSTextField(wrappingLabelWithString: item.transcriptPreview)
@@ -820,8 +849,9 @@ final class ConversationCardView: NSView {
         self.timeBadge = NSTextField(labelWithString: item.timeFormatted)
         self.sizeBadge = NSTextField(labelWithString: item.fileSizeString)
 
-        self.openButton = NSButton(title: "Reveal in Finder", target: nil, action: nil)
-        self.playButton = NSButton(title: "Play", target: nil, action: nil)
+        self.playButton = IconButton(symbol: "play.fill")
+        self.openButton = IconButton(symbol: "folder")
+        self.deleteButton = IconButton(symbol: "trash")
 
         super.init(frame: .zero)
 
@@ -855,6 +885,7 @@ final class ConversationCardView: NSView {
         previewLabel.font = .systemFont(ofSize: 12, weight: .regular)
         previewLabel.maximumNumberOfLines = 3
         previewLabel.lineBreakMode = .byWordWrapping
+        (previewLabel.cell as? NSTextFieldCell)?.truncatesLastVisibleLine = true
 
         dateBadge.translatesAutoresizingMaskIntoConstraints = false
         dateBadge.font = .systemFont(ofSize: 11, weight: .medium)
@@ -866,27 +897,20 @@ final class ConversationCardView: NSView {
         sizeBadge.font = .systemFont(ofSize: 10, weight: .medium)
         sizeBadge.textColor = Palette.secondaryText
 
-        openButton.translatesAutoresizingMaskIntoConstraints = false
-        openButton.bezelStyle = .rounded
-        openButton.font = .systemFont(ofSize: 11, weight: .semibold)
-        openButton.target = self
-        openButton.action = #selector(openClicked)
-        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: nil) {
-            folderImg.size = NSSize(width: 12, height: 12)
-            openButton.image = folderImg
-            openButton.imagePosition = .imageLeading
-        }
-
         playButton.translatesAutoresizingMaskIntoConstraints = false
-        playButton.bezelStyle = .rounded
-        playButton.font = .systemFont(ofSize: 11, weight: .medium)
         playButton.target = self
         playButton.action = #selector(playClicked)
-        if let playImg = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil) {
-            playImg.size = NSSize(width: 10, height: 10)
-            playButton.image = playImg
-            playButton.imagePosition = .imageLeading
-        }
+        playButton.alphaValue = 0.0
+
+        openButton.translatesAutoresizingMaskIntoConstraints = false
+        openButton.target = self
+        openButton.action = #selector(openClicked)
+        openButton.alphaValue = 0.0
+
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteClicked)
+        deleteButton.alphaValue = 0.0
 
         let divider = NSBox()
         divider.translatesAutoresizingMaskIntoConstraints = false
@@ -902,6 +926,7 @@ final class ConversationCardView: NSView {
         addSubview(timeBadge)
         addSubview(playButton)
         addSubview(openButton)
+        addSubview(deleteButton)
 
         NSLayoutConstraint.activate([
             micIcon.topAnchor.constraint(equalTo: topAnchor, constant: 16),
@@ -931,11 +956,20 @@ final class ConversationCardView: NSView {
             timeBadge.leadingAnchor.constraint(equalTo: dateBadge.trailingAnchor, constant: 8),
             timeBadge.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
 
+            deleteButton.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
+            deleteButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            deleteButton.widthAnchor.constraint(equalToConstant: 22),
+            deleteButton.heightAnchor.constraint(equalToConstant: 22),
+
             openButton.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
-            openButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            openButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
+            openButton.widthAnchor.constraint(equalToConstant: 22),
+            openButton.heightAnchor.constraint(equalToConstant: 22),
 
             playButton.centerYAnchor.constraint(equalTo: dateBadge.centerYAnchor),
-            playButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -6),
+            playButton.trailingAnchor.constraint(equalTo: openButton.leadingAnchor, constant: -8),
+            playButton.widthAnchor.constraint(equalToConstant: 22),
+            playButton.heightAnchor.constraint(equalToConstant: 22),
         ])
     }
 
@@ -954,6 +988,9 @@ final class ConversationCardView: NSView {
     override func mouseEntered(with event: NSEvent) {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
+            playButton.animator().alphaValue = 1.0
+            openButton.animator().alphaValue = 1.0
+            deleteButton.animator().alphaValue = 1.0
             layer?.borderColor = Palette.accentPurple.withAlphaComponent(0.6).cgColor
             layer?.shadowOpacity = 0.16
         }
@@ -962,6 +999,9 @@ final class ConversationCardView: NSView {
     override func mouseExited(with event: NSEvent) {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
+            playButton.animator().alphaValue = 0.0
+            openButton.animator().alphaValue = 0.0
+            deleteButton.animator().alphaValue = 0.0
             layer?.borderColor = Palette.border.cgColor
             layer?.shadowOpacity = 0.08
         }
@@ -973,6 +1013,10 @@ final class ConversationCardView: NSView {
 
     @objc private func playClicked() {
         onPlay(item.wavURL)
+    }
+
+    @objc private func deleteClicked() {
+        onDelete(item.filename)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -987,6 +1031,9 @@ final class ConversationCardView: NSView {
         previewLabel.textColor = Palette.secondaryText
         dateBadge.textColor = Palette.secondaryText
         timeBadge.textColor = Palette.secondaryText
+        playButton.refreshColors()
+        openButton.refreshColors()
+        deleteButton.refreshColors()
     }
 }
 
