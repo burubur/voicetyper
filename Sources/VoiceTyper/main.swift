@@ -1,3 +1,6 @@
+import Cocoa
+import Foundation
+
 let banner = UpgradeManager.banner
 
 let args = CommandLine.arguments

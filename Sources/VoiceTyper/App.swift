@@ -390,11 +390,9 @@ final class App: NSObject, NSApplicationDelegate {
         historyWindowController.showWindow(nil)
     }
 
-    private let conversationStorage = VoiceConversationStorage()
-
     // MARK: - Transcription Pipeline
 
-    private func processRecording(mode: DictationMode = .standard) {
+    private func processRecording(mode: DictationMode = .standard, lap: Int? = nil) {
         let audioFrames = audioRecorder.stopRecording()
 
         // Reject too-short recordings (~< 0.4 seconds)
