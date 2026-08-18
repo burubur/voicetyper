@@ -11,13 +11,14 @@ A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for 
 
 - **Direct Dictation (Hold-to-Talk)**: Hold `Right Option` to speak, release to transcribe and type directly at your cursor.
 - **Hands-Free Conversation Capture (Toggle)**: Tap `Shift + Right Option` once to talk hands-free; tap again to stop. Automatically segments recordings into **rolling 5-minute laps** to bound memory, and automatically stops on **1 minute of silence**.
-- **Native Classical Audio DSP**: 4th-order 80Hz Butterworth high-pass filter cuts 50/60Hz AC hum and laptop fan noise; vDSP spectral subtraction preserves natural vocal clarity.
+- **Native Classical Audio DSP & Adaptive Gain**: 4th-order 80Hz Butterworth high-pass filter cuts 50/60Hz AC hum and laptop fan noise; vDSP spectral subtraction eliminates background hiss; adaptive speech gain & soft-knee normalization boosts quiet speech by up to +18dB to -1.0 dBFS headroom without distortion.
 - **Dynamic Vocabulary Biasing**: Injects project glossary terms and code symbols directly into Whisper's prompt context to eliminate phoneme hallucinations on domain technical words.
 - **Grace Period**: Briefly pause mid-sentence (up to 800ms) without chopping your audio into separate chunks.
 - **Double-Tap Abort**: Rapidly double-tap `Right Option` within 300ms (or click the floating indicator) to silently discard the recording.
 - **Silence Rejection**: Automatically detects dead audio and drops the transaction — no accidental typing or blank files.
 - **Clipboard Preservation**: Borrows your clipboard for ~500ms to paste text, then restores your original clipboard contents.
-- **Transcription History Window**: Native macOS GUI window to view past transcriptions, trigger recording, and switch models.
+- **Dual-Mode Floating Indicator**: Minimalist 34x34px pink circle for direct dictation; 136x34px purple pill with **live 5-bar signal-reactive waveform EQ**, lap counter, and ticking timer for conversation memos.
+- **Transcription Studio Window**: Dual-tab macOS GUI window (Transcriptions & Conversations) with hover-to-reveal borderless action buttons (`▷ Play`, `📁 Finder`, `📋 Copy`, `🗑 Delete`), live search, and bounded card layouts.
 - **Single-Instance & Zero-Sudo Upgrades**: Automatically terminates stale instances on startup (`~/.voicetyper/voicetyper.pid`) and upgrades seamlessly in user-space (`voicetyper upgrade`).
 
 ## Prerequisites
@@ -82,8 +83,8 @@ make uninstall
 | **Pause & Resume** | Release < 800ms, hold again | Grace period prevents splitting sentences |
 | **Abort Recording** | Double-tap `Right Option` (< 300ms) or click pill | Silently discards audio buffer |
 | **Force Stop Processing** | Press `Ctrl + C` | Instantly halts transcription animation and aborts |
-| **Show UI Window** | Menu bar icon → "Show VoiceTyper" | Opens past transcriptions and model settings |
-| **Quit** | Menu bar icon → "Quit VoiceTyper" | Terminates background agent cleanly |
+| **Show UI Window** | Menu bar icon → "Show VoiceTyper" (`⌘H`) | Opens past transcriptions and model settings |
+| **Quit** | Menu bar icon → "Quit VoiceTyper" (`⌘Q`) | Terminates background agent cleanly |
 
 ---
 
@@ -94,21 +95,22 @@ graph TD
     %% Components
     App["App<br/>(Orchestrator & Mode Switcher)"]
     KL["KeyboardListener<br/>(CGEvent Tap / Hands-Free Toggle)"]
-    AR["AudioRecorder<br/>(AVAudioEngine + VoiceProcessingIO)"]
-    DSP["AudioDSP<br/>(80Hz High-Pass + Spectral Subtraction)"]
+    AR["AudioRecorder<br/>(AVAudioEngine + Live RMS Power Callback)"]
+    DSP["AudioDSP<br/>(High-Pass + Spectral Subtraction + Adaptive Gain)"]
     LM["ConversationLapManager<br/>(5-Min Laps & 1-Min Silence VAD)"]
     WT["WhisperTranscriber<br/>(SwiftWhisper / Dynamic Vocabulary)"]
     TI["TextInjector<br/>(Clipboard / CGEvent)"]
     CS["VoiceConversationStorage<br/>(~/.voicetyper/conversation/)"]
-    FRI["FloatingRecordingIndicator<br/>(Minimalist Pill: 🟣 01 │ 04:28)"]
-    THW["TranscriptionHistoryWindowController<br/>(NSWindow / UI)"]
+    FRI["FloatingRecordingIndicator<br/>(Pink Circle / 5-Bar Live EQ Pill)"]
+    THW["TranscriptionHistoryWindowController<br/>(Studio Window / Dual Tabs)"]
 
     %% Flow
     KL -- "Direct (Hold) / Memo (Toggle)" --> App
-    App -- "Show / Hide / Lap Count" --> FRI
+    App -- "Show / Hide / Audio Level" --> FRI
+    AR -- "Live RMS Level" --> FRI
     App -- "Start / Stop" --> AR
     AR -- "Raw 16kHz PCM" --> DSP
-    DSP -- "Sanitized Audio" --> App
+    DSP -- "Sanitized & Boosted Audio" --> App
     App -- "Rolling 5m Laps" --> LM
     LM -- "Flush Part N" --> CS
     App -- "Transcribe Sanitized Audio" --> WT

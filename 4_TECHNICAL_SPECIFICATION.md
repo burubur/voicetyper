@@ -54,16 +54,18 @@ Deploys a dual-phased OS injection layer to offset heavy tensor-calculation lag 
 ## 6. Floating Visual UX (`FloatingRecordingIndicator.swift`)
 - **Window Level:** Generates an invisible `NSWindow` marked as `.borderless`, `.floating`, sitting structurally separated above every native macOS application canvas.
 - **Geometry Coordinates:** Calculates exact bottom-center `NSPoint(x, y)` relative dynamically to `screen.visibleFrame.midX` and `.minY + 40.0` preventing dock occlusions.
-- **Render Compositor & Abort Interaction:**
-  - Instantiates pure `CALayer` and CoreGraphic contexts overlapping native SF Symbols (`mic.fill`). 
-  - Subscribes `CABasicAnimation` key paths mutating contextual opaque background elements sequentially with `CAMediaTimingFunction` set globally as `.easeInEaseOut` for an infinite pulsating loop effect.
-  - Exposes an interactive `onAbort` callback linked to `KeyboardListener.forceAbort()` to discard active recordings when clicked.
+- **Dual Visual Modes:**
+  - **Direct Dictation (`.standard`)**: 34x34px coral circle (`#FD7979`) with centered white mic icon and breathing opacity pulse (`1.0 ⟷ 0.35`).
+  - **Conversation Memo (`.memoryVault`)**: Symmetrical 136x34px purple pill (`#A855F7`) featuring a **live 5-bar signal-reactive waveform EQ** (animated dynamically in real time via normalized RMS power from `AudioRecorder.onAudioLevel`), lap counter (`01`), divider (`│`), and ticking elapsed timer (`00:00`).
+- **Interactive Abort:** Entire floating view is clickable to immediately halt and discard or wrap up the active recording.
 
 ---
 
 ## 7. History & Settings UI (`TranscriptionHistoryWindowController.swift`)
-- **Window Management:** Controls an `NSWindow` hosting a native SwiftUI/AppKit interface accessible via the system status bar menu ("Show VoiceTyper").
-- **State Store:** Maintains an in-memory collection of recent transcription history records, allowing single-click copy operations, quick re-transcription triggers, and model switching menus.
+- **Window Management:** Controls an `NSWindow` hosting a native AppKit interface accessible via the system status bar menu ("Show VoiceTyper", shortcut `⌘H`).
+- **Dual-Tab Interface:**
+  - **Transcriptions Tab**: Live search bar + text-bounded cards (110–160pt height, max 4 lines with ellipsis) with bottom-row hover-to-reveal `[ 📋 Copy ]` and `[ 🗑 Delete ]` borderless buttons.
+  - **Conversations Tab**: Vault directory path sub-header with borderless `[ 🔄 ]` refresh and `[ 📁 ]` Finder buttons + recorded conversation cards (110–150pt height) with hover-to-reveal `[ ▷ Play ]`, `[ 📁 Finder ]`, and `[ 🗑 Delete ]` buttons.
 
 ---
 
@@ -81,6 +83,10 @@ Deploys a dual-phased OS injection layer to offset heavy tensor-calculation lag 
   - Noise floor estimation via lowest-energy baseline frames.
   - Spectral subtraction with over-subtraction factor $\alpha = 0.75$ and spectral floor $\beta = 0.05$.
   - Reconstructed via Overlap-Add (OLA) inverse FFT with synthesis window normalization.
+- **Adaptive Speech Gain & Dynamic Normalization:**
+  - Fast SIMD peak detection using `vDSP_maxmgv` to measure absolute peak amplitude across all PCM frames.
+  - Dynamic gain factor scaling quiet speech by up to `+18 dB` (8.0x) targeting `-1.0 dBFS` (`0.89`) headroom.
+  - Soft-knee hyperbolic tangent ($\tanh$) saturation limiter applied for samples $> 0.85$, eliminating digital clipping.
 - **Execution Performance:** $< 2\text{ms}$ execution latency on Apple Silicon for 10-second audio clips with zero memory allocations during inference.
 
 ---
@@ -90,7 +96,7 @@ Deploys a dual-phased OS injection layer to offset heavy tensor-calculation lag 
 ```mermaid
 graph LR
     A["Shift + Right Option<br/>(1st Tap Toggle)"] --> B["ConversationLapManager<br/>(5-Min Timer + Silence VAD)"]
-    B --> C["Floating Indicator<br/>(🟣 01 │ 04:28)"]
+    B --> C["Floating Indicator<br/>(Live 5-Bar EQ Pill)"]
     B -->|5:00 Interval| D["Flush Lap N Audio<br/>(conversation_..._partN.wav)"]
     D --> E["Background Task<br/>Whisper Transcribe"]
     B -->|2nd Tap or 60s Silence| F["Finalize & Close Session"]
@@ -113,6 +119,7 @@ graph LR
   - Class property deduplication in `App.swift`.
   - Memory exclusivity correctness on buffer pointers (`realPtr[k]` vs `real[k]`).
   - Rejection of invalid temporary pointers in `DSPSplitComplex`.
+  - **2-Pass Cross-File Type-Stack Symbol & Access-Level Verification**: Indexes all types, methods, properties, and visibility modifiers (`private`, `internal`), verifying all call-sites cross-file.
 
 
 

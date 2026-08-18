@@ -125,10 +125,36 @@ Click into any text editor (even a blank document) to begin testing.
 - Transcription does not hallucinate pause tokens (e.g. `[Music]`, `Thank you`).
 - Unit test `AudioDSPTests` confirms $>15\text{dB}$ attenuation on 60Hz hum.
 
-## Scenario 13: Swift Symbol, Import & Memory Exclusivity Gate (`make test`)
-**Goal:** Verify that static AST syntax, imports, and buffer memory exclusivity are verified before any commit is pushed.
+## Scenario 13: Swift Symbol, Import & Access-Level Quality Gate (`make test`)
+**Goal:** Verify that static AST syntax, imports, member resolution, and access-control visibility are verified before any commit is pushed.
 **Action:**
 1. Run `make test` from repository root.
 **Expected result:**
-- `tests/verify_symbols.sh` runs as Step 1, validating all framework imports (`Cocoa`, `Foundation`), property deduplication in `App.swift`, and buffer pointer exclusivity (`realPtr[k]` vs `real[k]`).
-- Full unit test suite and sandbox installation test suite pass with exit code `0`.
+- `tests/verify_symbols.sh` runs as Step 1, validating:
+  - Framework imports (`Cocoa`, `Foundation`, `Accelerate`).
+  - Class property deduplication in `App.swift`.
+  - Buffer pointer exclusivity (`realPtr[k]` vs `real[k]`).
+  - **2-Pass Symbol Table & Access-Level Matrix**: Catches undeclared cross-file member invocations and `private` method accessibility violations before commit.
+- Passes cleanly with exit code `0`.
+
+## Scenario 14: Audio DSP Adaptive Speech Gain & Dynamic Normalization
+**Goal:** Verify that quiet voice recordings receive up to +18dB clean gain boost to -1.0 dBFS peak without digital clipping.
+**Action:**
+1. Run `python3 tests/test_audio_dsp_gain.py` or execute unit test `AudioDSPTests.testAdaptiveGainBoostsQuietAudio`.
+2. Speak softly during hold-to-talk dictation.
+**Expected result:**
+- Peak amplitude scales up to `0.89` linear peak headroom (-1.0 dBFS).
+- Soft-knee hyperbolic tangent ($\tanh$) ceiling smoothly compresses samples $> 0.85$ with zero waveform truncation.
+- Whisper transcribes quiet speech accurately and converges 15–25% faster.
+
+## Scenario 15: Studio Window UI, Dual Tabs & Hover Actions
+**Goal:** Verify that Transcription and Conversation cards strictly respect height boundaries, ellipsis truncation, and borderless hover action buttons.
+**Action:**
+1. Open VoiceTyper window via menu bar (`⌘H`).
+2. Hover over a Transcription card:
+   - Borderless `[ 📋 Copy ]` and `[ 🗑 Delete ]` icons fade in smoothly at the bottom-right.
+   - Clicking `[ 📋 Copy ]` flashes green `"Copied!"` indicator.
+3. Switch to **Conversations** tab:
+   - Sub-header renders directory path + compact `[ 🔄 ]` refresh + `[ 📁 ]` Finder icon buttons.
+   - Hovering over a card reveals `[ ▷ Play ]`, `[ 📁 Finder ]`, and `[ 🗑 Delete ]` icon buttons.
+   - Long transcripts wrap cleanly up to 3 lines with ellipsis truncation (`...`) within bounded card height (110–150pt).
