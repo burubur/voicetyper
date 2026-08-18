@@ -145,6 +145,97 @@ if grep -nE "NSUserInterfaceItemIdentifier\([^r]" "${ROOT_DIR}"/Sources/VoiceTyp
     FAILURES=$((FAILURES + 1))
 fi
 
+# 6. Cross-File Type & Member Resolution Gate
+echo "✦ Checking cross-file symbol and member references across all Swift sources..."
+python3 - "${ROOT_DIR}" << 'EOF' || FAILURES=$((FAILURES + 1))
+import os, re, sys
+
+root_dir = sys.argv[1]
+sources_dir = os.path.join(root_dir, "Sources", "VoiceTyper")
+
+# Pass 1: Build symbol index of all internal types and their members
+type_members = {}  # { "TypeName": { "methodName", "propertyName", "shared", ... } }
+type_declarations = {} # { "TypeName": "File.swift" }
+
+for fname in sorted(os.listdir(sources_dir)):
+    if not fname.endswith(".swift"):
+        continue
+    fpath = os.path.join(sources_dir, fname)
+    with open(fpath, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    
+    type_stack = []  # [(TypeName, start_brace_depth)]
+    brace_depth = 0
+    
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+            continue
+            
+        # Match class/struct/actor/enum/protocol/extension definition
+        m_type = re.match(r'^\s*(final\s+)?(public\s+|private\s+|internal\s+)?(class|struct|actor|enum|protocol|extension)\s+([A-Za-z0-9_]+)', line)
+        if m_type:
+            type_name = m_type.group(4)
+            if type_name not in type_members:
+                type_members[type_name] = set()
+                type_declarations[type_name] = fname
+            type_stack.append((type_name, brace_depth))
+        
+        open_braces = line.count("{")
+        close_braces = line.count("}")
+        
+        if type_stack:
+            curr_type = type_stack[-1][0]
+            # Match function
+            m_func = re.match(r'^\s*(@objc\s+)?(public\s+|private\s+|internal\s+)?(static\s+|class\s+)?func\s+([A-Za-z0-9_]+)', line)
+            if m_func:
+                type_members[curr_type].add(m_func.group(4))
+                
+            # Match property
+            m_prop = re.match(r'^\s*(public\s+|private\s+|internal\s+)?(static\s+|class\s+)?(let|var)\s+([A-Za-z0-9_]+)', line)
+            if m_prop:
+                type_members[curr_type].add(m_prop.group(4))
+                
+            # Match enum case
+            m_case = re.match(r'^\s*case\s+([A-Za-z0-9_]+)', line)
+            if m_case:
+                type_members[curr_type].add(m_case.group(1))
+                
+        brace_depth += (open_braces - close_braces)
+        while type_stack and brace_depth <= type_stack[-1][1]:
+            type_stack.pop()
+
+# Pass 2: Verify member calls on known internal types
+failures = 0
+for fname in sorted(os.listdir(sources_dir)):
+    if not fname.endswith(".swift"):
+        continue
+    fpath = os.path.join(sources_dir, fname)
+    with open(fpath, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+            continue
+            
+        # Match <TypeName>.(shared\.)?<member>
+        for type_name, members in type_members.items():
+            # e.g. UpgradeManager.shared.checkForUpdates or UpgradeManager.checkForUpdates
+            pattern = rf'\b{type_name}\s*\.\s*(shared\s*\.\s*)?([a-zA-Z0-9_]+)'
+            for m in re.finditer(pattern, line):
+                member = m.group(2)
+                # Ignore self-referential 'init', 'self', or rawValue
+                if member in ("self", "init", "rawValue", "allCases", "Type", "shared", "sharedInstance"):
+                    continue
+                if member not in members:
+                    print(f"❌ [{fname}:{i}] Type '{type_name}' (defined in {type_declarations[type_name]}) has no member '{member}'!")
+                    failures += 1
+
+if failures > 0:
+    sys.exit(1)
+EOF
+
 echo "───────────────────────────────────────────────────────────────────────────"
 if [ "${FAILURES}" -eq 0 ]; then
     echo "✓ All Swift static symbol, import & exclusivity quality gates passed cleanly!"
