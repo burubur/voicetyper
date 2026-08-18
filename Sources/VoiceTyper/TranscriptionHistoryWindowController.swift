@@ -857,7 +857,7 @@ final class ConversationCardView: NSView {
         self.timeBadge = NSTextField(labelWithString: item.timeFormatted)
         self.sizeBadge = NSTextField(labelWithString: item.fileSizeString)
 
-        self.playButton = IconButton(symbol: "play.fill")
+        self.playButton = IconButton(symbol: "play")
         self.openButton = IconButton(symbol: "folder")
         self.deleteButton = IconButton(symbol: "trash")
 
