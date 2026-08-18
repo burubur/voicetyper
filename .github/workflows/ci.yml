@@ -24,7 +24,12 @@ jobs:
           xcodebuild -version || true
 
       - name: Compile Release Binary
-        run: make compile
+        run: |
+          swift build -c release || {
+            echo "❌ Swift build failed! Retrying with verbose flags:"
+            swift build -c release -v
+            exit 1
+          }
 
       - name: Run Unit & Installation Integration Tests
         run: make test
