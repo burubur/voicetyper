@@ -218,8 +218,8 @@ public final class AudioDSP: Sendable {
                         if orig > 1e-6 {
                             let subtracted = orig - strength * noiseSpectrum[k]
                             let gain = max(subtracted / orig, spectralFloor)
-                            real[k] *= gain
-                            imag[k] *= gain
+                            realPtr[k] *= gain
+                            imagPtr[k] *= gain
                         }
                     }
 
