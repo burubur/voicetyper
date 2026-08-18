@@ -1,13 +1,13 @@
 import Foundation
 
-/// Manages long-form conversation sessions with rolling lap segmentation (e.g. 10-minute chapters)
+/// Manages long-form conversation sessions with rolling lap segmentation (e.g. 5-minute chapters)
 /// and automatic idle silence detection to protect memory and storage.
 public final class ConversationLapManager: @unchecked Sendable {
 
-    /// Duration limit per lap before rolling over to the next segment (default: 10 minutes = 600s).
+    /// Duration limit per lap before rolling over to the next segment (default: 5 minutes = 300s).
     public var lapDurationLimit: TimeInterval
 
-    /// Duration of continuous silence before auto-stopping (default: 2 minutes = 120s).
+    /// Duration of continuous silence before auto-stopping (default: 1 minute = 60s).
     public var silenceTimeoutLimit: TimeInterval
 
     public private(set) var currentLap: Int = 1
@@ -24,7 +24,7 @@ public final class ConversationLapManager: @unchecked Sendable {
     /// Invoked when continuous silence exceeds `silenceTimeoutLimit`.
     public var onSilenceTimeout: (() -> Void)?
 
-    public init(lapDuration: TimeInterval = 600.0, silenceTimeout: TimeInterval = 120.0) {
+    public init(lapDuration: TimeInterval = 300.0, silenceTimeout: TimeInterval = 60.0) {
         self.lapDurationLimit = lapDuration
         self.silenceTimeoutLimit = silenceTimeout
     }

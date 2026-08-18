@@ -4,7 +4,7 @@ import XCTest
 final class ConversationLapManagerTests: XCTestCase {
 
     func testInitialLapState() {
-        let manager = ConversationLapManager(lapDuration: 600.0, silenceTimeout: 120.0)
+        let manager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
         XCTAssertEqual(manager.currentLap, 1)
         XCTAssertFalse(manager.isRunning)
 
@@ -16,7 +16,7 @@ final class ConversationLapManagerTests: XCTestCase {
     }
 
     func testLapRolloverAtInterval() {
-        let manager = ConversationLapManager(lapDuration: 600.0, silenceTimeout: 120.0)
+        let manager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
         manager.startSession()
 
         var rolloverLap: Int?
@@ -31,12 +31,12 @@ final class ConversationLapManagerTests: XCTestCase {
         let dummySamples = [Float](repeating: 0.1, count: 16000)
         manager.appendAudioFrames(dummySamples)
 
-        // Simulate time advancing 10 minutes (601 seconds)
+        // Simulate time advancing 5 minutes (301 seconds)
         let startTime = manager.currentLapStartTime ?? Date()
-        let futureTime = startTime.addingTimeInterval(601.0)
+        let futureTime = startTime.addingTimeInterval(301.0)
 
         let didRoll = manager.evaluateLapRollover(now: futureTime)
-        XCTAssertTrue(didRoll, "Lap should roll over when elapsed time exceeds 600s")
+        XCTAssertTrue(didRoll, "Lap should roll over when elapsed time exceeds 300s (5 mins)")
         XCTAssertEqual(manager.currentLap, 2, "Current lap should advance to 2")
         XCTAssertEqual(rolloverLap, 1, "Completed lap number reported in callback should be 1")
         XCTAssertEqual(rolloverFramesCount, 16000, "Lap 1 audio frames should be passed to rollover callback")
@@ -46,7 +46,7 @@ final class ConversationLapManagerTests: XCTestCase {
     }
 
     func testSilenceTimeoutDetection() {
-        let manager = ConversationLapManager(lapDuration: 600.0, silenceTimeout: 120.0)
+        let manager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
         manager.startSession()
 
         var silenceTriggered = false
@@ -54,15 +54,15 @@ final class ConversationLapManagerTests: XCTestCase {
             silenceTriggered = true
         }
 
-        // Below silence threshold (RMS < 0.005) for 60s -> No timeout
-        let below60s = manager.evaluateSilence(averageRMS: 0.001, durationInSeconds: 60.0)
-        XCTAssertFalse(below60s)
+        // Below silence threshold (RMS < 0.005) for 30s -> No timeout
+        let below30s = manager.evaluateSilence(averageRMS: 0.001, durationInSeconds: 30.0)
+        XCTAssertFalse(below30s)
         XCTAssertFalse(silenceTriggered)
 
-        // Below silence threshold for 125s -> Silence timeout triggered!
-        let above120s = manager.evaluateSilence(averageRMS: 0.001, durationInSeconds: 125.0)
-        XCTAssertTrue(above120s)
-        XCTAssertTrue(silenceTriggered, "Silence timeout callback must fire when silence exceeds 120s")
+        // Below silence threshold for 65s -> Silence timeout triggered!
+        let above60s = manager.evaluateSilence(averageRMS: 0.001, durationInSeconds: 65.0)
+        XCTAssertTrue(above60s)
+        XCTAssertTrue(silenceTriggered, "Silence timeout callback must fire when silence exceeds 60s (1 min)")
     }
 
     func testFormattingHelpers() {
