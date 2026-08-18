@@ -17,7 +17,7 @@ private class ClickableContainerView: NSView {
 
 /// Floating recording indicator:
 /// - **Direct Transcription (.standard)**: 34x34px Pink/Coral Circle with centered breathing microphone icon.
-/// - **Conversation Capture (.memoryVault)**: 116x34px Purple Pill with perfectly vertically centered microphone, Lap Counter (`01`), and live Time Lapse (`04:28`).
+/// - **Conversation Capture (.memoryVault)**: 128x34px Purple Pill with breathing microphone, static minimal voice bar, Lap Counter (`01`), and live Time Lapse (`04:28`).
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -48,7 +48,7 @@ final class FloatingRecordingIndicator {
         let isMemo = (mode == .memoryVault)
         let activeBgColor = isMemo ? memoryPurple : standardCoral
 
-        let winWidth: CGFloat = isMemo ? 116.0 : 34.0
+        let winWidth: CGFloat = isMemo ? 128.0 : 34.0
         let winHeight: CGFloat = 34.0
 
         if window == nil {
@@ -175,7 +175,11 @@ final class FloatingRecordingIndicator {
             self.imageView = imgView
             contentStack.addArrangedSubview(imgView)
 
-            // 2. Lap Counter (01, 02)
+            // 2. Minimal Static Horizontal Voice Bar (3 micro-bars)
+            let voiceBarStack = createStaticVoiceBar()
+            contentStack.addArrangedSubview(voiceBarStack)
+
+            // 3. Lap Counter (01, 02)
             let lap = NSTextField(labelWithString: String(format: "%02d", currentLap))
             lap.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
             lap.textColor = .white
@@ -183,7 +187,7 @@ final class FloatingRecordingIndicator {
             self.lapLabel = lap
             contentStack.addArrangedSubview(lap)
 
-            // 3. Subtle 1px Divider
+            // 4. Subtle 1px Divider
             let sep = NSBox()
             sep.boxType = .custom
             sep.fillColor = NSColor.white.withAlphaComponent(0.35)
@@ -196,7 +200,7 @@ final class FloatingRecordingIndicator {
             self.separatorView = sep
             contentStack.addArrangedSubview(sep)
 
-            // 4. Time Lapse (00:00)
+            // 5. Time Lapse (00:00)
             let time = NSTextField(labelWithString: "00:00")
             time.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
             time.textColor = .white
@@ -222,6 +226,31 @@ final class FloatingRecordingIndicator {
         }
 
         container.addSubview(pill)
+    }
+
+    /// Creates a clean, minimal static voice bar consisting of 3 rounded micro-bars
+    private func createStaticVoiceBar() -> NSView {
+        let barStack = NSStackView()
+        barStack.orientation = .horizontal
+        barStack.alignment = .centerY
+        barStack.spacing = 2
+        barStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let heights: [CGFloat] = [6.0, 11.0, 7.0]
+        for h in heights {
+            let bar = NSView()
+            bar.wantsLayer = true
+            bar.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.85).cgColor
+            bar.layer?.cornerRadius = 1.0
+            bar.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                bar.widthAnchor.constraint(equalToConstant: 2),
+                bar.heightAnchor.constraint(equalToConstant: h)
+            ])
+            barStack.addArrangedSubview(bar)
+        }
+
+        return barStack
     }
 
     // MARK: - Timer
