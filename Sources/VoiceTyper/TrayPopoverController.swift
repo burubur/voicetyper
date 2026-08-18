@@ -13,7 +13,7 @@ final class TrayPopoverController: NSObject {
     private let popover = NSPopover()
     private let contentViewController = NSViewController()
 
-    var onModeChanged: ((App.ActiveMode) -> Void)?
+    var onModeChanged: ((ActiveMode) -> Void)?
     var onModelSelected: ((String) -> Void)?
     var onOpenHistory: (() -> Void)?
     var onOpenVault: (() -> Void)?
@@ -109,7 +109,7 @@ final class TrayPopoverController: NSObject {
         modePopUp.font = .systemFont(ofSize: 11, weight: .medium)
         modePopUp.target = self
         modePopUp.action = #selector(modeChanged(_:))
-        for mode in App.ActiveMode.allCases {
+        for mode in ActiveMode.allCases {
             let item = NSMenuItem(title: mode.displayName, action: nil, keyEquivalent: "")
             item.representedObject = mode.rawValue
             modePopUp.menu?.addItem(item)
@@ -286,7 +286,7 @@ final class TrayPopoverController: NSObject {
         statusDot?.layer?.backgroundColor = color.cgColor
     }
 
-    func updateActiveMode(_ mode: App.ActiveMode) {
+    func updateActiveMode(_ mode: ActiveMode) {
         for item in modeButton?.itemArray ?? [] {
             if let raw = item.representedObject as? String, raw == mode.rawValue {
                 modeButton?.select(item)
@@ -354,7 +354,7 @@ final class TrayPopoverController: NSObject {
 
     @objc private func modeChanged(_ sender: NSPopUpButton) {
         guard let raw = sender.selectedItem?.representedObject as? String,
-              let mode = App.ActiveMode(rawValue: raw) else { return }
+              let mode = ActiveMode(rawValue: raw) else { return }
         onModeChanged?(mode)
     }
 

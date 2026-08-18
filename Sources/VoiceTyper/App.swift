@@ -5,6 +5,23 @@ import Cocoa
 
 /// Main orchestrator that wires together audio recording, transcription,
 /// text injection, and keyboard listening into the menu bar app.
+public enum ActiveMode: String, CaseIterable, Sendable {
+    case smartDual = "smart_dual"
+    case directOnly = "direct_only"
+    case conversationOnly = "conversation_only"
+
+    var displayName: String {
+        switch self {
+        case .smartDual:
+            return "Smart Dual (Right Option: Dictate | Shift+Option: Memo)"
+        case .directOnly:
+            return "Direct Dictation Only (Type at Cursor)"
+        case .conversationOnly:
+            return "Conversation Capture Only (Save Audio & Text)"
+        }
+    }
+}
+
 @MainActor
 final class App: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -27,23 +44,6 @@ final class App: NSObject, NSApplicationDelegate {
 
     /// Models currently being downloaded in the background.
     private var downloadingModels: Set<String> = []
-
-    public enum ActiveMode: String, CaseIterable {
-        case smartDual = "smart_dual"
-        case directOnly = "direct_only"
-        case conversationOnly = "conversation_only"
-
-        var displayName: String {
-            switch self {
-            case .smartDual:
-                return "Smart Dual (Right Option: Dictate | Shift+Option: Memo)"
-            case .directOnly:
-                return "Direct Dictation Only (Type at Cursor)"
-            case .conversationOnly:
-                return "Conversation Capture Only (Save Audio & Text)"
-            }
-        }
-    }
 
     private var activeMode: ActiveMode {
         get {
