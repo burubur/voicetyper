@@ -69,4 +69,63 @@ final class AudioDSPTests: XCTestCase {
             XCTAssertFalse(sample.isInfinite)
         }
     }
+
+    func testRealWorldConversationAudioSampleDenoising() {
+        // Targets the user's recorded conversation memo file if present locally
+        let targetFilename = "conversation_20260818_063228_bdb8b8ad.wav"
+        let baseDir = VoiceConversationStorage.defaultBaseDirectory
+
+        var foundURL: URL?
+
+        if FileManager.default.fileExists(atPath: baseDir.path) {
+            let enumerator = FileManager.default.enumerator(
+                at: baseDir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            while let url = enumerator?.nextObject() as? URL {
+                if url.lastPathComponent == targetFilename || (foundURL == nil && url.pathExtension.lowercased() == "wav") {
+                    foundURL = url
+                    if url.lastPathComponent == targetFilename {
+                        break
+                    }
+                }
+            }
+        }
+
+        guard let sampleURL = foundURL,
+              let data = try? Data(contentsOf: sampleURL),
+              data.count > 44 else {
+            // File not present on this test runner; pass gracefully
+            print("ℹ️ Real-world sample '\(targetFilename)' not found on runner; skipping local disk benchmark.")
+            return
+        }
+
+        // Read 16-bit PCM WAV samples (skipping 44-byte header)
+        let pcmData = data.subdata(in: 44..<data.count)
+        let sampleCount = pcmData.count / 2
+        var floatSamples = [Float](repeating: 0, count: sampleCount)
+
+        pcmData.withUnsafeBytes { rawBuffer in
+            let int16Ptr = rawBuffer.bindMemory(to: Int16.self)
+            for i in 0..<sampleCount {
+                floatSamples[i] = Float(int16Ptr[i]) / 32768.0
+            }
+        }
+
+        guard floatSamples.count > 512 else { return }
+
+        let denoised = AudioDSP.denoise(floatSamples, sampleRate: 16000.0, noiseReductionStrength: 0.75)
+
+        XCTAssertEqual(denoised.count, floatSamples.count, "Denoised sample count must match input")
+
+        // Assert all samples are bounded and valid
+        for sample in denoised {
+            XCTAssertFalse(sample.isNaN, "Output must not contain NaN")
+            XCTAssertFalse(sample.isInfinite, "Output must not contain Inf")
+            XCTAssertLessThanOrEqual(abs(sample), 2.0, "Output must not clip uncontrollably")
+        }
+
+        print("✓ Successfully processed real-world audio memo '\(sampleURL.lastPathComponent)' (\(denoised.count) samples) through AudioDSP.")
+    }
 }
