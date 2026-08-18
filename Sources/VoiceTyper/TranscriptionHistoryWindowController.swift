@@ -210,7 +210,8 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
                 
                 NSLayoutConstraint.activate([
                     card.widthAnchor.constraint(equalTo: cardsStack.widthAnchor),
-                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+                    card.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+                    card.heightAnchor.constraint(lessThanOrEqualToConstant: 160)
                 ])
                 
                 NSAnimationContext.runAnimationGroup({ context in
