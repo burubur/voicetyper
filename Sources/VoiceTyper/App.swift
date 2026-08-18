@@ -249,19 +249,16 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkForUpdates() {
-        Task {
-            let result = await UpgradeManager.shared.checkForUpdates()
-            await MainActor.run {
-                let alert = NSAlert()
-                alert.messageText = "VoiceTyper Updates"
-                if result.hasUpdate {
-                    alert.informativeText = "A new version of VoiceTyper is available (\(result.remoteVersion)).\nRun 'voicetyper upgrade' in your terminal to update."
-                    alert.alertStyle = .informational
-                } else {
-                    alert.informativeText = "You are on the latest version (\(UpgradeManager.currentVersion))."
-                    alert.alertStyle = .informational
-                }
-                alert.runModal()
+        let alert = NSAlert()
+        alert.messageText = "VoiceTyper v\(UpgradeManager.currentVersion)"
+        alert.informativeText = "To update VoiceTyper to the latest version, run:\n\nvoicetyper upgrade\n\nin your terminal."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "View Releases on GitHub")
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn {
+            if let url = URL(string: "https://github.com/burubur/voicetyper/releases") {
+                NSWorkspace.shared.open(url)
             }
         }
     }
