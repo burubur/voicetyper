@@ -47,15 +47,16 @@ compile:
 		swift build -c release; \
 	fi
 
-# Runs Swift unit tests
+# Runs Swift unit tests & static symbol quality gates
 unit-test:
+	./tests/verify_symbols.sh
 	@if command -v swift >/dev/null 2>&1; then \
 		swift test; \
 	else \
 		echo "ℹ️  'swift' toolchain not detected in current Linux environment."; \
 		echo "   VoiceTyper requires macOS (AppKit/AVFoundation/Accelerate)."; \
 		echo "✦ Performing local script syntax & lint quality gates..."; \
-		bash -n install.sh uninstall.sh download-models.sh tests/test_install.sh && \
+		bash -n install.sh uninstall.sh download-models.sh tests/test_install.sh tests/verify_symbols.sh && \
 		echo "✓ All repository scripts passed local syntax validation."; \
 		echo "✦ Run 'make test' on your macOS machine or check GitHub Actions CI:"; \
 		echo "   https://github.com/burubur/voicetyper/actions"; \
