@@ -128,4 +128,23 @@ final class AudioDSPTests: XCTestCase {
 
         print("✓ Successfully processed real-world audio memo '\(sampleURL.lastPathComponent)' (\(denoised.count) samples) through AudioDSP.")
     }
+
+    func testAdaptiveGainBoostsQuietAudio() {
+        let sampleRate: Double = 16000.0
+        let sampleCount = 16000
+
+        // Generate quiet speech signal (peak ~0.10)
+        var quiet = [Float](repeating: 0, count: sampleCount)
+        for i in 0..<sampleCount {
+            quiet[i] = 0.10 * Float(sin(2.0 * Double.pi * 300.0 * Double(i) / sampleRate))
+        }
+
+        let boosted = AudioDSP.applyAdaptiveGain(quiet, targetPeak: 0.89, maxGain: 8.0)
+        let rawPeak = quiet.map { abs($0) }.max() ?? 0
+        let boostedPeak = boosted.map { abs($0) }.max() ?? 0
+
+        XCTAssertEqual(boosted.count, quiet.count)
+        XCTAssertGreaterThan(boostedPeak, rawPeak * 2.0, "Quiet speech should receive significant gain boost")
+        XCTAssertLessThanOrEqual(boostedPeak, 0.95, "Boosted speech should not exceed safe headroom ceiling")
+    }
 }

@@ -15,16 +15,20 @@ public final class AudioDSP: Sendable {
 
     private init() {}
 
-    /// Applies full audio enhancement pipeline (High-pass filter + Spectral subtraction).
+    /// Applies full audio enhancement pipeline (High-pass filter + Spectral subtraction + Adaptive Gain).
     /// - Parameters:
     ///   - samples: Raw 16kHz mono Float samples.
     ///   - sampleRate: Audio sample rate (default: 16000 Hz).
     ///   - noiseReductionStrength: Subtraction multiplier (0.0 = off, 0.75 = natural, 1.0 = aggressive).
-    /// - Returns: Denoised 16kHz mono Float samples.
+    ///   - targetPeak: Target peak amplitude headroom (default: 0.89 = -1.0 dBFS).
+    ///   - maxGain: Maximum allowable gain multiplier (default: 8.0x = +18 dB boost).
+    /// - Returns: Denoised and normalized 16kHz mono Float samples.
     public static func denoise(
         _ samples: [Float],
         sampleRate: Double = 16000.0,
-        noiseReductionStrength: Float = 0.75
+        noiseReductionStrength: Float = 0.75,
+        targetPeak: Float = 0.89,
+        maxGain: Float = 8.0
     ) -> [Float] {
         guard samples.count > 512 else { return samples }
 
@@ -38,7 +42,14 @@ public final class AudioDSP: Sendable {
             strength: noiseReductionStrength
         )
 
-        return denoised
+        // Step 3: Adaptive Speech Gain & Dynamic Normalization
+        let normalized = applyAdaptiveGain(
+            denoised,
+            targetPeak: targetPeak,
+            maxGain: maxGain
+        )
+
+        return normalized
     }
 
     // MARK: - 1. High-Pass Filter (Cascaded Biquad 4th-Order Butterworth)
@@ -259,5 +270,44 @@ public final class AudioDSP: Sendable {
         }
 
         return output
+    }
+
+    // MARK: - 3. Adaptive Speech Gain & Soft-Knee Limiter
+
+    /// Boosts speech audio signal to optimal peak headroom (-1.0 dBFS / 0.89)
+    /// with soft-knee saturation to eliminate digital clipping.
+    public static func applyAdaptiveGain(
+        _ input: [Float],
+        targetPeak: Float = 0.89,
+        maxGain: Float = 8.0
+    ) -> [Float] {
+        guard input.count > 16 else { return input }
+
+        var maxMag: Float = 0
+        vDSP_maxmgv(input, 1, &maxMag, vDSP_Length(input.count))
+        guard maxMag > 1e-4 else { return input }
+
+        let gain = min(targetPeak / maxMag, maxGain)
+        var boosted = [Float](repeating: 0, count: input.count)
+        var g = gain
+        vDSP_vsmul(input, 1, &g, &boosted, 1, vDSP_Length(input.count))
+
+        // Soft-knee limiter: Linear under threshold (0.85), smooth saturation above
+        let threshold: Float = 0.85
+        let ceiling: Float = 0.95
+        let headroom = ceiling - threshold
+
+        for i in 0..<boosted.count {
+            let val = boosted[i]
+            let absVal = abs(val)
+            if absVal > threshold {
+                let sign: Float = val > 0 ? 1.0 : -1.0
+                let excess = absVal - threshold
+                let compressed = threshold + headroom * tanh(excess / headroom)
+                boosted[i] = sign * min(ceiling, compressed)
+            }
+        }
+
+        return boosted
     }
 }
