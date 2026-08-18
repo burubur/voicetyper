@@ -463,23 +463,15 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     private func setupConversationsHeader() {
-        let refreshBtn = NSButton(title: "", target: self, action: #selector(refreshConversationsClicked))
-        refreshBtn.bezelStyle = .rounded
+        let refreshBtn = IconButton(symbol: "arrow.clockwise")
         refreshBtn.toolTip = "Refresh voice recordings"
-        if let refreshImg = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh") {
-            refreshImg.size = NSSize(width: 12, height: 12)
-            refreshBtn.image = refreshImg
-            refreshBtn.imagePosition = .imageOnly
-        }
+        refreshBtn.target = self
+        refreshBtn.action = #selector(refreshConversationsClicked)
 
-        let openFolderBtn = NSButton(title: "", target: self, action: #selector(openConversationFolderClicked))
-        openFolderBtn.bezelStyle = .rounded
+        let openFolderBtn = IconButton(symbol: "folder")
         openFolderBtn.toolTip = "Open vault directory in Finder"
-        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: "Open in Finder") {
-            folderImg.size = NSSize(width: 13, height: 13)
-            openFolderBtn.image = folderImg
-            openFolderBtn.imagePosition = .imageOnly
-        }
+        openFolderBtn.target = self
+        openFolderBtn.action = #selector(openConversationFolderClicked)
 
         conversationsHeaderBar.addArrangedSubview(conversationsPathLabel)
         conversationsHeaderBar.addArrangedSubview(refreshBtn)
@@ -492,10 +484,10 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             conversationsHeaderBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
             conversationsHeaderBar.heightAnchor.constraint(equalToConstant: 36),
 
-            refreshBtn.widthAnchor.constraint(equalToConstant: 28),
+            refreshBtn.widthAnchor.constraint(equalToConstant: 24),
             refreshBtn.heightAnchor.constraint(equalToConstant: 24),
 
-            openFolderBtn.widthAnchor.constraint(equalToConstant: 28),
+            openFolderBtn.widthAnchor.constraint(equalToConstant: 24),
             openFolderBtn.heightAnchor.constraint(equalToConstant: 24),
         ])
     }
@@ -1239,21 +1231,52 @@ class TranscriptionCardView: NSView {
 // MARK: - IconButton
 
 class IconButton: NSButton {
+    private var trackingArea: NSTrackingArea?
+
     init(symbol: String) {
         super.init(frame: .zero)
         if let symbolImage = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
-            symbolImage.size = NSSize(width: 16, height: 16)
+            symbolImage.size = NSSize(width: 14, height: 14)
             image = symbolImage
         }
         imagePosition = .imageOnly
         imageScaling = .scaleProportionallyUpOrDown
         isBordered = false
-        wantsLayer = false
+        wantsLayer = true
+        layer?.cornerRadius = 5
         refreshColors()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        if let trackingArea = trackingArea {
+            addTrackingArea(trackingArea)
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            layer?.backgroundColor = Palette.searchBackground.cgColor
+            contentTintColor = Palette.primaryText
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            layer?.backgroundColor = NSColor.clear.cgColor
+            contentTintColor = Palette.secondaryText
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1263,6 +1286,7 @@ class IconButton: NSButton {
 
     func refreshColors() {
         contentTintColor = Palette.secondaryText
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 }
 
