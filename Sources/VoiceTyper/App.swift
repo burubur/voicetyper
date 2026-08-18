@@ -11,6 +11,9 @@ final class App: NSObject, NSApplicationDelegate {
     private let audioRecorder = AudioRecorder()
     private let textInjector = TextInjector()
     private let keyboardListener = KeyboardListener()
+    private let conversationStorage = VoiceConversationStorage()
+    private let lapManager = ConversationLapManager(lapDuration: 300.0, silenceTimeout: 60.0)
+    private var lapTimer: Timer?
     private let historyWindowController = TranscriptionHistoryWindowController()
     private var transcriber: Transcriber?
     private var activeVocabulary: [String] = []
@@ -63,6 +66,23 @@ final class App: NSObject, NSApplicationDelegate {
         keyboardListener.delegate = self
         FloatingRecordingIndicator.shared.onAbort = { [weak self] in
             self?.keyboardListener.forceAbort()
+        }
+
+        lapManager.onLapRollover = { [weak self] completedLap, lapFrames in
+            guard let self else { return }
+            Task { @MainActor in
+                print("🔄 Lap \(completedLap) completed (5 mins). Archiving Part \(completedLap)...")
+                FloatingRecordingIndicator.shared.updateLap(self.lapManager.currentLap)
+                self.processLapRecording(lap: completedLap, audioFrames: lapFrames)
+            }
+        }
+
+        lapManager.onSilenceTimeout = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                print("⏱️ 1-Minute silence timeout detected. Auto-stopping conversation capture...")
+                self.keyboardListenerDidStopRecording(mode: .memoryVault)
+            }
         }
         
         loadModel()
@@ -454,17 +474,18 @@ final class App: NSObject, NSApplicationDelegate {
                     // Append trailing space so consecutive dictations don't merge
                     self.textInjector.injectText(text + " ")
                 } else {
-                    // Memory Vault Mode: Archive raw audio WAV and text to ~/.voicetyper/conversation/
-                    print("🧠 Archiving voice conversation note: \(text)")
+                    let lapIndex = lap ?? self.lapManager.currentLap
+                    print("🧠 Archiving voice conversation note (Part \(lapIndex)): \(text)")
                     do {
                         try self.conversationStorage.saveConversation(
                             audioFrames: audioFrames,
-                            transcription: text
+                            transcription: text,
+                            lap: lapIndex
                         )
                     } catch {
                         print("❌ Failed to archive voice conversation note: \(error)")
                     }
-                    self.historyWindowController.appendTranscription("🧠 [Vault Memo] " + text)
+                    self.historyWindowController.appendTranscription("🧠 [Part \(lapIndex)] " + text)
                 }
 
                 self.updateIcon(symbol: "mic")
@@ -475,6 +496,36 @@ final class App: NSObject, NSApplicationDelegate {
                 }
                 print("❌ Transcription error: \(error)")
                 self.updateIcon(symbol: "mic")
+            }
+        }
+    }
+
+    private func processLapRecording(lap: Int, audioFrames: [Float]) {
+        guard let transcriber = self.transcriber, !audioFrames.isEmpty else { return }
+
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let text = try await transcriber.transcribe(audioFrames: audioFrames)
+                guard !self.abortRequested else { return }
+                guard self.isMeaningfulSpeech(text: text, audioFrames: audioFrames) else {
+                    print("🔕 Lap \(lap) contained silence. Discarded.")
+                    return
+                }
+
+                print("🧠 Archiving completed Lap \(lap): \(text)")
+                do {
+                    try self.conversationStorage.saveConversation(
+                        audioFrames: audioFrames,
+                        transcription: text,
+                        lap: lap
+                    )
+                } catch {
+                    print("❌ Failed to archive Lap \(lap): \(error)")
+                }
+                self.historyWindowController.appendTranscription("🧠 [Part \(lap)] " + text)
+            } catch {
+                print("❌ Lap \(lap) transcription error: \(error)")
             }
         }
     }
@@ -617,12 +668,24 @@ extension App: KeyboardListenerDelegate {
         abortRequested = false
         updateIcon(symbol: (mode == .memoryVault) ? "waveform.and.mic" : "waveform.circle")
         historyWindowController.setRecording(true)
-        FloatingRecordingIndicator.shared.show(mode: mode)
+
+        if mode == .memoryVault {
+            lapManager.startSession()
+            lapTimer?.invalidate()
+            lapTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.lapManager.evaluateLapRollover()
+                }
+            }
+        }
+
+        FloatingRecordingIndicator.shared.show(mode: mode, lap: mode == .memoryVault ? lapManager.currentLap : 1)
 
         do {
             try audioRecorder.startRecording()
             if mode == .memoryVault {
-                print("🎙️ Recording Voice Conversation Memo (Mode: \(activeMode.rawValue))...")
+                print("🎙️ Recording Hands-Free Voice Conversation Memo (Mode: \(activeMode.rawValue))...")
             } else {
                 print("🎙️ Recording Direct Dictation (Mode: \(activeMode.rawValue))...")
             }
@@ -635,13 +698,20 @@ extension App: KeyboardListenerDelegate {
     func keyboardListenerDidStopRecording(mode detectedMode: DictationMode) {
         let mode = effectiveMode(from: detectedMode)
         print("⏹️  Recording stopped. Processing (Mode: \(mode))...")
+        lapTimer?.invalidate()
+        lapTimer = nil
+        let (finalLap, _) = (mode == .memoryVault) ? lapManager.stopSession() : (1, 0.0)
+
         historyWindowController.setRecording(false)
         FloatingRecordingIndicator.shared.hide()
-        processRecording(mode: mode)
+        processRecording(mode: mode, lap: (mode == .memoryVault) ? finalLap : nil)
     }
 
     func keyboardListenerDidAbort() {
         abortRequested = true
+        lapTimer?.invalidate()
+        lapTimer = nil
+        _ = lapManager.stopSession()
         _ = audioRecorder.stopRecording()  // Discard audio
         
         Task { @MainActor in

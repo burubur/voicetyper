@@ -64,12 +64,14 @@ public final class VoiceConversationStorage: Sendable {
         transcription: String,
         sampleRate: Int = 16000,
         date: Date = Date(),
-        identifier: String = UUID().uuidString.prefix(8).lowercased()
+        identifier: String = UUID().uuidString.prefix(8).lowercased(),
+        lap: Int? = nil
     ) throws -> (audioURL: URL, textURL: URL) {
         try ensureDirectoriesExist(for: date)
 
         let timestamp = Self.timestampFormatter.string(from: date)
-        let filenameBase = "conversation_\(timestamp)_\(identifier)"
+        let lapSuffix = (lap != nil) ? "_part\(lap!)" : ""
+        let filenameBase = "conversation_\(timestamp)_\(identifier)\(lapSuffix)"
 
         let wavURL = audioDirectory(for: date).appendingPathComponent("\(filenameBase).wav")
         let txtURL = textDirectory(for: date).appendingPathComponent("\(filenameBase).txt")
@@ -78,9 +80,10 @@ public final class VoiceConversationStorage: Sendable {
         let wavData = Self.createWavData(from: audioFrames, sampleRate: sampleRate)
         try wavData.write(to: wavURL, options: .atomic)
 
-        // 2. Write Transcribed Text (UTF-8)
-        let textContent = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
-        try textContent.write(to: txtURL, atomically: true, encoding: .utf8)
+        // 2. Write transcription text file
+        let header = "--- VoiceTyper Conversation Memo \(lap != nil ? "(Part \(lap!))" : "") ---\nDate: \(date)\nSamples: \(audioFrames.count)\n\n"
+        let fullText = header + transcription
+        try fullText.write(to: txtURL, atomically: true, encoding: .utf8)
 
         print("💾 Saved voice memo:")
         print("   📁 Date:  \(Self.dateFolderFormatter.string(from: date))")
