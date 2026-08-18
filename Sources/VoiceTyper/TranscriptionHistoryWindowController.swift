@@ -462,21 +462,22 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
     }
 
     private func setupConversationsHeader() {
-        let openFolderBtn = NSButton(title: "Open in Finder", target: self, action: #selector(openConversationFolderClicked))
-        openFolderBtn.bezelStyle = .rounded
-        openFolderBtn.font = .systemFont(ofSize: 11, weight: .medium)
-        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: nil) {
-            folderImg.size = NSSize(width: 14, height: 14)
-            openFolderBtn.image = folderImg
-            openFolderBtn.imagePosition = .imageLeading
-        }
-
         let refreshBtn = NSButton(title: "", target: self, action: #selector(refreshConversationsClicked))
         refreshBtn.bezelStyle = .rounded
-        if let refreshImg = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) {
+        refreshBtn.toolTip = "Refresh voice recordings"
+        if let refreshImg = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh") {
             refreshImg.size = NSSize(width: 12, height: 12)
             refreshBtn.image = refreshImg
             refreshBtn.imagePosition = .imageOnly
+        }
+
+        let openFolderBtn = NSButton(title: "", target: self, action: #selector(openConversationFolderClicked))
+        openFolderBtn.bezelStyle = .rounded
+        openFolderBtn.toolTip = "Open vault directory in Finder"
+        if let folderImg = NSImage(systemSymbolName: "folder", accessibilityDescription: "Open in Finder") {
+            folderImg.size = NSSize(width: 13, height: 13)
+            openFolderBtn.image = folderImg
+            openFolderBtn.imagePosition = .imageOnly
         }
 
         conversationsHeaderBar.addArrangedSubview(conversationsPathLabel)
@@ -489,6 +490,12 @@ final class TranscriptionHistoryWindowController: NSWindowController, NSTextFiel
             conversationsHeaderBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
             conversationsHeaderBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
             conversationsHeaderBar.heightAnchor.constraint(equalToConstant: 36),
+
+            refreshBtn.widthAnchor.constraint(equalToConstant: 28),
+            refreshBtn.heightAnchor.constraint(equalToConstant: 24),
+
+            openFolderBtn.widthAnchor.constraint(equalToConstant: 28),
+            openFolderBtn.heightAnchor.constraint(equalToConstant: 24),
         ])
     }
 
