@@ -334,13 +334,13 @@ final class TrayPopoverController: NSObject {
                 let switchBtn = NSButton(title: "Select", target: self, action: #selector(modelButtonClicked(_:)))
                 switchBtn.bezelStyle = .rounded
                 switchBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                switchBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
+                switchBtn.identifier = NSUserInterfaceItemIdentifier(rawValue: option.filename)
                 row.addArrangedSubview(switchBtn)
             } else {
                 let downloadBtn = NSButton(title: "⬇️ Download", target: self, action: #selector(modelButtonClicked(_:)))
                 downloadBtn.bezelStyle = .rounded
                 downloadBtn.font = .systemFont(ofSize: 10, weight: .medium)
-                downloadBtn.identifier = NSUserInterfaceItemIdentifier(option.filename)
+                downloadBtn.identifier = NSUserInterfaceItemIdentifier(rawValue: option.filename)
                 row.addArrangedSubview(downloadBtn)
             }
 

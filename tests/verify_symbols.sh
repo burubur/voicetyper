@@ -78,6 +78,13 @@ if grep -nE "DSPSplitComplex\(realp:\s*&" "${ROOT_DIR}"/Sources/VoiceTyper/*.swi
     FAILURES=$((FAILURES + 1))
 fi
 
+# 5. Check for NSUserInterfaceItemIdentifier missing rawValue label
+echo "✦ Checking for NSUserInterfaceItemIdentifier rawValue label requirement..."
+if grep -nE "NSUserInterfaceItemIdentifier\([^r]" "${ROOT_DIR}"/Sources/VoiceTyper/*.swift 2>/dev/null; then
+    echo "❌ NSUserInterfaceItemIdentifier requires 'rawValue:' label parameter (e.g. NSUserInterfaceItemIdentifier(rawValue: ...))."
+    FAILURES=$((FAILURES + 1))
+fi
+
 echo "───────────────────────────────────────────────────────────────────────────"
 if [ "${FAILURES}" -eq 0 ]; then
     echo "✓ All Swift static symbol, import & exclusivity quality gates passed cleanly!"
