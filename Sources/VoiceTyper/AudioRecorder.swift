@@ -15,6 +15,15 @@ final class AudioRecorder: @unchecked Sendable {
     private(set) var isRecording = false
     var onAudioLevel: (@Sendable (Float) -> Void)?
 
+    /// Indicates whether hardware voice processing / AUVoiceIO is active.
+    /// Dictation must keep this false to prevent CoreAudio from ducking macOS system volume.
+    var isVoiceProcessingEnabled: Bool {
+        if #available(macOS 13.0, *) {
+            return engine.inputNode.isVoiceProcessingEnabled
+        }
+        return false
+    }
+
     private let targetSampleRate: Double = 16000.0
 
     /// Starts capturing audio from the default microphone.
@@ -28,11 +37,6 @@ final class AudioRecorder: @unchecked Sendable {
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
-
-        // Enable Apple Voice Processing DSP IO if available on macOS
-        if #available(macOS 13.0, *) {
-            try? inputNode.setVoiceProcessingEnabled(true)
-        }
 
         // Install a tap to capture audio buffers
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
