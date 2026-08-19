@@ -81,7 +81,7 @@ public final class VoiceConversationStorage: Sendable {
         try wavData.write(to: wavURL, options: .atomic)
 
         // 2. Write transcription text file
-        let header = "--- VoiceTyper Conversation Memo \(lap != nil ? "(Part \(lap!))" : "") ---\nDate: \(date)\nSamples: \(audioFrames.count)\n\n"
+        let header = "--- Conversation Memory \(lap != nil ? "(Part \(lap!))" : "") ---\nDate: \(date)\nSamples: \(audioFrames.count)\n\n"
         let fullText = header + transcription
         try fullText.write(to: txtURL, atomically: true, encoding: .utf8)
 

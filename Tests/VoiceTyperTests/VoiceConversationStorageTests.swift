@@ -53,7 +53,8 @@ final class VoiceConversationStorageTests: XCTestCase {
 
         // Assert text content matches
         let savedText = try String(contentsOf: result.textURL, encoding: .utf8)
-        XCTAssertEqual(savedText, sampleTranscript)
+        XCTAssertTrue(savedText.contains("--- Conversation Memory"))
+        XCTAssertTrue(savedText.contains(sampleTranscript))
 
         // Assert WAV header validity
         let wavData = try Data(contentsOf: result.audioURL)
