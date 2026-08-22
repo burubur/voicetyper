@@ -17,7 +17,7 @@ private class ClickableContainerView: NSView {
 
 /// Floating recording indicator:
 /// - **Direct Transcription (.standard)**: 34x34px Pink/Coral Circle with centered breathing microphone icon.
-/// - **Conversation Capture (.memoryVault)**: 128x34px Purple Pill with breathing microphone, static minimal voice bar, Lap Counter (`01`), and live Time Lapse (`04:28`).
+/// - **Conversation Capture (.memoryVault)**: 136x34px Purple Pill with breathing microphone, dynamic audio visualizer (flat dots when silent), Lap Counter (`01`), and live Time Lapse (`04:28`).
 @MainActor
 final class FloatingRecordingIndicator {
     static let shared = FloatingRecordingIndicator()
@@ -30,7 +30,7 @@ final class FloatingRecordingIndicator {
     private var timeLabel: NSTextField?
     private var separatorView: NSView?
     private var barHeightConstraints: [NSLayoutConstraint] = []
-    private let baseBarHeights: [CGFloat] = [4.0, 8.0, 13.0, 9.0, 5.0]
+    private let baseBarHeights: [CGFloat] = [2.0, 2.0, 2.0, 2.0, 2.0]
 
     private var timer: Timer?
     private var startTime: Date?
@@ -120,7 +120,7 @@ final class FloatingRecordingIndicator {
     func updateAudioLevel(_ level: Float) {
         guard activeMode == .memoryVault, !barHeightConstraints.isEmpty else { return }
 
-        let multipliers: [CGFloat] = [6.0, 9.0, 7.0, 10.0, 6.0]
+        let multipliers: [CGFloat] = [7.0, 13.0, 18.0, 13.0, 7.0]
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.06
