@@ -64,9 +64,10 @@ def draw_icon(x, y, w, h):
         bg_g = int(bg_g * (1 - factor) + 102 * factor)
         bg_b = int(bg_b * (1 - factor) + 241 * factor)
 
-    # Pure Minimalist Microphone Geometry (SF Symbol Style)
-    cap_top = -0.36
-    cap_bot = 0.06
+    # Option 1: Native macOS Menu Bar SF Symbol (mic.fill)
+    # 1. Central Capsule
+    cap_top = -0.32
+    cap_bot = 0.08
     cap_r = 0.17
 
     in_capsule = False
@@ -77,41 +78,46 @@ def draw_icon(x, y, w, h):
     elif (nx ** 2 + (ny - cap_bot) ** 2) <= cap_r ** 2 and ny > cap_bot:
         in_capsule = True
 
-    # U-Shaped Cradle Arc
+    # 2. Floating U-Cradle Arc
+    cr_center_y = 0.08
+    cr_inner = 0.24
+    cr_outer = 0.31
+    cr_dist = math.sqrt(nx ** 2 + (ny - cr_center_y) ** 2)
+
     in_cradle = False
-    cr_dist = math.sqrt(nx ** 2 + (ny - 0.06) ** 2)
-    if 0.23 <= cr_dist <= 0.29 and ny >= 0.04:
+    if cr_inner <= cr_dist <= cr_outer and ny >= cr_center_y:
         in_cradle = True
-    if (abs(nx) >= 0.23 and abs(nx) <= 0.29) and (-0.08 <= ny <= 0.06):
+    # Upright arms
+    if (cr_inner <= abs(nx) <= cr_outer) and (-0.08 <= ny <= cr_center_y):
         in_cradle = True
+    # Rounded tips of cradle arms
+    tip_cx = (cr_inner + cr_outer) / 2.0
+    tip_r = (cr_outer - cr_inner) / 2.0
+    if ny < -0.08:
+        if ((abs(nx) - tip_cx) ** 2 + (ny - (-0.08)) ** 2) <= tip_r ** 2:
+            in_cradle = True
 
-    # Stand Stem
+    # 3. Small Bottom Stem (Floating, No base plate!)
     in_stem = False
-    if abs(nx) <= 0.035 and 0.35 <= ny <= 0.48:
+    stem_w = 0.035
+    if abs(nx) <= stem_w and (cr_center_y + cr_inner) <= ny <= 0.48:
         in_stem = True
-
-    # Horizontal Base
-    in_base = False
-    if abs(nx) <= 0.16 and 0.48 <= ny <= 0.54:
-        in_base = True
-    if 0.48 <= ny <= 0.54 and abs(nx) > 0.16:
-        end_cx = 0.16 if nx > 0 else -0.16
-        end_cy = 0.51
-        if ((nx - end_cx) ** 2 + (ny - end_cy) ** 2) <= 0.03 ** 2:
-            in_base = True
+    if ny > 0.48:
+        if (nx ** 2 + (ny - 0.48) ** 2) <= stem_w ** 2:
+            in_stem = True
 
     if in_capsule:
-        # Crisp luminous white to subtle cyan gradient fill
-        g_t = (ny - cap_top) / (cap_bot + cap_r - cap_top)
-        return (clamp(255 - 20 * g_t), clamp(255 - 5 * g_t), 255, 255)
-    elif in_cradle or in_stem or in_base:
-        # Bright vibrant electric cyan/violet #38BDF8
-        return (240, 246, 255, 255)
+        # Crisp white with subtle soft top-to-bottom illumination
+        g_t = (ny - (cap_top - cap_r)) / (cap_bot + cap_r - (cap_top - cap_r))
+        return (clamp(255 - 15 * g_t), clamp(255 - 5 * g_t), 255, 255)
+    elif in_cradle or in_stem:
+        # Crisp luminous white to soft electric cyan
+        return (248, 250, 255, 255)
 
     # Soft ambient glow around the microphone
-    mic_center_dist = math.sqrt(nx ** 2 + (ny - 0.0) ** 2)
-    if mic_center_dist < 0.55:
-        glow = (1.0 - (mic_center_dist / 0.55)) * 0.18
+    mic_dist = math.sqrt(nx ** 2 + (ny - 0.0) ** 2)
+    if mic_dist < 0.55:
+        glow = (1.0 - (mic_dist / 0.55)) * 0.16
         bg_r = int(bg_r + 99 * glow)
         bg_g = int(bg_g + 102 * glow)
         bg_b = int(bg_b + 241 * glow)
