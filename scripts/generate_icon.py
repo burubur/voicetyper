@@ -126,11 +126,18 @@ def generate_icns(output_path):
     total_len = len(chunks) + 8
     icns_data = b'icns' + struct.pack('>I', total_len) + bytes(chunks)
 
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    os.makedirs(output_dir, exist_ok=True)
     with open(output_path, 'wb') as f:
         f.write(icns_data)
 
+    png_path = os.path.join(output_dir, "AppIcon.png")
+    png_preview = create_png(512, 512, draw_icon)
+    with open(png_path, 'wb') as f:
+        f.write(png_preview)
+
     print(f"✓ Generated {output_path} ({len(icns_data)} bytes)")
+    print(f"✓ Generated {png_path} ({len(png_preview)} bytes)")
 
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else "Resources/AppIcon.icns"

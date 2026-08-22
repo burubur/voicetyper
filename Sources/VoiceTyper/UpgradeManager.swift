@@ -1,5 +1,11 @@
 import Foundation
 
+/// Version details holding version and commit metadata.
+public struct VersionDetails: Sendable {
+    public let version: String
+    public let commit: String
+}
+
 /// Manages self-upgrading, source tracking, and version inspection for VoiceTyper.
 public final class UpgradeManager: Sendable {
     public static let shared = UpgradeManager()
@@ -15,7 +21,7 @@ public final class UpgradeManager: Sendable {
      \\/ \\___/|_|\\___\\___|   |_|\\__, | .__/ \\___|_|   
                                 __/ | |              
                                |___/|_|              \u{001B}[0m
-\u{001B}[1mNative macOS Offline Voice Dictation & Conversation Vault\u{001B}[0m
+\u{001B}[1mNative macOS Offline Voice Dictation & Conversation Vault (v\(currentVersion))\u{001B}[0m
 \u{001B}[36mRepository: https://github.com/burubur/voicetyper\u{001B}[0m
 """
 
@@ -45,6 +51,70 @@ public final class UpgradeManager: Sendable {
             }
         } catch {}
         return "release"
+    }
+
+    /// Fetches git commit logs between two commit hashes.
+    public static func getGitLogBetween(in directory: String, fromCommit: String, toCommit: String) -> [String] {
+        guard !fromCommit.isEmpty, !toCommit.isEmpty, fromCommit != toCommit, fromCommit != "release", toCommit != "release" else {
+            return []
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", directory, "log", "--oneline", "\(fromCommit)..\(toCommit)", "-n", "10"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let str = String(data: data, encoding: .utf8) {
+                    return str.components(separatedBy: .newlines)
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                }
+            }
+        } catch {}
+        return []
+    }
+
+    /// Inspects an installed binary path and returns its version details.
+    public static func getBinaryVersionInfo(at binaryPath: String) -> VersionDetails {
+        let fallback = VersionDetails(version: currentVersion, commit: "release")
+        guard FileManager.default.fileExists(atPath: binaryPath) else {
+            return fallback
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binaryPath)
+        process.arguments = ["version"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    var ver = currentVersion
+                    var commit = "release"
+                    if let start = str.range(of: "VoiceTyper ")?.upperBound {
+                        let rem = str[start...]
+                        if let parenStart = rem.range(of: "(")?.lowerBound {
+                            ver = String(rem[..<parenStart]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let parenEnd = rem.range(of: ")")?.lowerBound {
+                                commit = String(rem[rem.index(after: parenStart)..<parenEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                        } else {
+                            ver = String(rem).trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    }
+                    return VersionDetails(version: ver, commit: commit)
+                }
+            }
+        } catch {}
+        return fallback
     }
 
     /// Checks if a git repository directory has a remote configured.
@@ -152,7 +222,10 @@ public final class UpgradeManager: Sendable {
 
         let installPath = determineInstallPath()
         let detectedSource = findSourceRepoDir(customSourceDir: customSourceDir)
-        let oldCommit = getGitCommit(in: detectedSource ?? ".")
+
+        // 1. Capture old version and git commit info before upgrade
+        let oldInfo = getBinaryVersionInfo(at: installPath)
+        let oldCommit = (oldInfo.commit != "release" && !oldInfo.commit.isEmpty) ? oldInfo.commit : getGitCommit(in: detectedSource ?? ".")
 
         var sourceDir = detectedSource
         var isTempClone = false
@@ -344,8 +417,43 @@ public final class UpgradeManager: Sendable {
         }
         try? restart.run()
 
+        let effectiveNewCommit = !newCommit.isEmpty ? newCommit : getGitCommit(in: validSourceDir)
+
+        Swift.print("")
         Swift.print("───────────────────────────────────────────────────────────────────────────")
-        Swift.print("✅ VoiceTyper successfully upgraded! (\(oldCommit) → \(newCommit))")
+        Swift.print("✦ Version Transition:")
+        if !oldCommit.isEmpty && oldCommit != "release" {
+            Swift.print("   • Previous : \(oldInfo.version) (commit: \(oldCommit))")
+        } else {
+            Swift.print("   • Previous : \(oldInfo.version)")
+        }
+
+        if !effectiveNewCommit.isEmpty && effectiveNewCommit != "release" {
+            if oldInfo.version == currentVersion && oldCommit == effectiveNewCommit {
+                Swift.print("   • Current  : \(currentVersion) (commit: \(effectiveNewCommit), up to date)")
+            } else {
+                Swift.print("   • Current  : \(currentVersion) (commit: \(effectiveNewCommit))")
+            }
+        } else {
+            Swift.print("   • Current  : \(currentVersion)")
+        }
+
+        if oldCommit != effectiveNewCommit && oldCommit != "release" && effectiveNewCommit != "release" {
+            let logs = getGitLogBetween(in: validSourceDir, fromCommit: oldCommit, toCommit: effectiveNewCommit)
+            if !logs.isEmpty {
+                Swift.print("\n✦ Upgraded Commits (\(oldCommit)..\(effectiveNewCommit)):")
+                for entry in logs {
+                    Swift.print("   • \(entry)")
+                }
+            }
+        }
+
+        Swift.print("───────────────────────────────────────────────────────────────────────────")
+        if oldCommit != effectiveNewCommit && oldCommit != "release" {
+            Swift.print("✅ VoiceTyper successfully upgraded! (\(oldInfo.version) [\(oldCommit)] → \(currentVersion) [\(effectiveNewCommit)])")
+        } else {
+            Swift.print("✅ VoiceTyper is already up to date (\(currentVersion) [\(effectiveNewCommit)])")
+        }
         Swift.print("   App Bundle : \(appBundlePath)")
         Swift.print("   CLI Path   : \(installPath)")
         Swift.print("   Status     : Running in background (Menu Bar mic icon)")
