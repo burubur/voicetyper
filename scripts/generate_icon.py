@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 VoiceTyper App Icon Generator
-Generates high-resolution macOS squircle AppIcon with neon gradient, microphone glyph, and soundwave EQ bars.
-Outputs standard Apple .icns format without external dependencies (pure Python standard library).
+Generates high-resolution macOS squircle AppIcon with pure minimalist microphone glyph (SF Symbol style).
+Outputs standard Apple .icns and preview .png without external dependencies (pure Python standard library).
 """
 
 import math
@@ -49,63 +49,74 @@ def draw_icon(x, y, w, h):
         if edge >= 1.0:
             return (0, 0, 0, 0)
         alpha = int((1.0 - edge) * 255)
-        return (15, 23, 42, alpha // 3)
+        return (10, 15, 30, alpha // 3)
 
-    # Gradient background: Obsidian dark slate (#0F172A) to deep purple/cyan (#3B0764)
+    # Gradient background: Premium Deep Obsidian Slate (#0B1120) to Midnight Violet (#1E1138)
     t = (ny + 1.0) / 2.0
-    r = int(15 * (1 - t) + 40 * t)
-    g = int(23 * (1 - t) + 15 * t)
-    b = int(42 * (1 - t) + 75 * t)
+    bg_r = int(11 * (1 - t) + 30 * t)
+    bg_g = int(17 * (1 - t) + 17 * t)
+    bg_b = int(32 * (1 - t) + 56 * t)
 
-    # Subtle inner glow / border ring
-    if dist > 0.86:
-        factor = (dist - 0.86) / (0.92 - 0.86)
-        r = int(r * (1 - factor) + 99 * factor)
-        g = int(g * (1 - factor) + 102 * factor)
-        b = int(b * (1 - factor) + 241 * factor)
+    # Subtle inner bevel glow / border ring
+    if dist > 0.85:
+        factor = (dist - 0.85) / (0.92 - 0.85)
+        bg_r = int(bg_r * (1 - factor) + 99 * factor)
+        bg_g = int(bg_g * (1 - factor) + 102 * factor)
+        bg_b = int(bg_b * (1 - factor) + 241 * factor)
 
-    # Microphone capsule: centered at x=0, y from -0.35 to 0.05, radius 0.18
-    in_mic = False
-    if abs(nx) <= 0.18 and -0.35 <= ny <= 0.05:
-        in_mic = True
-    elif (nx ** 2 + (ny - (-0.35)) ** 2) <= 0.18 ** 2 and ny < -0.35:
-        in_mic = True
-    elif (nx ** 2 + (ny - 0.05) ** 2) <= 0.18 ** 2 and ny > 0.05:
-        in_mic = True
+    # Pure Minimalist Microphone Geometry (SF Symbol Style)
+    cap_top = -0.36
+    cap_bot = 0.06
+    cap_r = 0.17
 
-    # Microphone cradle
+    in_capsule = False
+    if abs(nx) <= cap_r and cap_top <= ny <= cap_bot:
+        in_capsule = True
+    elif (nx ** 2 + (ny - cap_top) ** 2) <= cap_r ** 2 and ny < cap_top:
+        in_capsule = True
+    elif (nx ** 2 + (ny - cap_bot) ** 2) <= cap_r ** 2 and ny > cap_bot:
+        in_capsule = True
+
+    # U-Shaped Cradle Arc
     in_cradle = False
-    cr_dist = math.sqrt(nx ** 2 + (ny - 0.05) ** 2)
-    if 0.24 <= cr_dist <= 0.32 and ny >= 0.0:
+    cr_dist = math.sqrt(nx ** 2 + (ny - 0.06) ** 2)
+    if 0.23 <= cr_dist <= 0.29 and ny >= 0.04:
+        in_cradle = True
+    if (abs(nx) >= 0.23 and abs(nx) <= 0.29) and (-0.08 <= ny <= 0.06):
         in_cradle = True
 
-    # Stand base
-    in_stand = False
-    if abs(nx) <= 0.04 and 0.30 <= ny <= 0.45:
-        in_stand = True
-    if abs(nx) <= 0.22 and 0.45 <= ny <= 0.52:
-        in_stand = True
+    # Stand Stem
+    in_stem = False
+    if abs(nx) <= 0.035 and 0.35 <= ny <= 0.48:
+        in_stem = True
 
-    # Soundwave bars left & right
-    in_wave = False
-    if abs(nx - (-0.52)) <= 0.04 and abs(ny - 0.0) <= 0.18:
-        in_wave = True
-    if abs(nx - (-0.38)) <= 0.04 and abs(ny - 0.0) <= 0.30:
-        in_wave = True
-    if abs(nx - 0.38) <= 0.04 and abs(ny - 0.0) <= 0.30:
-        in_wave = True
-    if abs(nx - 0.52) <= 0.04 and abs(ny - 0.0) <= 0.18:
-        in_wave = True
+    # Horizontal Base
+    in_base = False
+    if abs(nx) <= 0.16 and 0.48 <= ny <= 0.54:
+        in_base = True
+    if 0.48 <= ny <= 0.54 and abs(nx) > 0.16:
+        end_cx = 0.16 if nx > 0 else -0.16
+        end_cy = 0.51
+        if ((nx - end_cx) ** 2 + (ny - end_cy) ** 2) <= 0.03 ** 2:
+            in_base = True
 
-    if in_mic:
-        mic_t = (ny + 0.5) / 0.7
-        return (clamp(255 - 40 * mic_t), 255, 255, 255)
-    elif in_cradle or in_stand:
-        return (56, 189, 248, 255)
-    elif in_wave:
-        return (192, 132, 252, 255)
+    if in_capsule:
+        # Crisp luminous white to subtle cyan gradient fill
+        g_t = (ny - cap_top) / (cap_bot + cap_r - cap_top)
+        return (clamp(255 - 20 * g_t), clamp(255 - 5 * g_t), 255, 255)
+    elif in_cradle or in_stem or in_base:
+        # Bright vibrant electric cyan/violet #38BDF8
+        return (240, 246, 255, 255)
 
-    return (r, g, b, 255)
+    # Soft ambient glow around the microphone
+    mic_center_dist = math.sqrt(nx ** 2 + (ny - 0.0) ** 2)
+    if mic_center_dist < 0.55:
+        glow = (1.0 - (mic_center_dist / 0.55)) * 0.18
+        bg_r = int(bg_r + 99 * glow)
+        bg_g = int(bg_g + 102 * glow)
+        bg_b = int(bg_b + 241 * glow)
+
+    return (bg_r, bg_g, bg_b, 255)
 
 def generate_icns(output_path):
     sizes = [
