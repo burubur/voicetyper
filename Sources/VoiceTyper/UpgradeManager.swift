@@ -4,7 +4,7 @@ import Foundation
 public final class UpgradeManager: Sendable {
     public static let shared = UpgradeManager()
 
-    public static let currentVersion = "v0.5.0"
+    public static let currentVersion = "0.5.0"
 
     public static let banner = """
 \u{001B}[1m\u{001B}[36m __      __  _           _______                     
