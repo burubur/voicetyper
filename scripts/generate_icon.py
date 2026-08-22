@@ -43,26 +43,19 @@ def draw_icon(x, y, w, h):
     p = 4.5
     dist = (abs(nx) ** p + abs(ny) ** p) ** (1.0 / p)
 
-    if dist > 0.92:
-        # Anti-aliased outer edge
-        edge = (dist - 0.92) / (0.96 - 0.92)
-        if edge >= 1.0:
-            return (0, 0, 0, 0)
-        alpha = int((1.0 - edge) * 255)
-        return (10, 15, 30, alpha // 3)
-
-    # Gradient background: Premium Deep Obsidian Slate (#0B1120) to Midnight Violet (#1E1138)
+    # Gradient background: Seamless Deep Obsidian Slate (#0B1120) to Midnight Violet (#1E1138)
     t = (ny + 1.0) / 2.0
     bg_r = int(11 * (1 - t) + 30 * t)
     bg_g = int(17 * (1 - t) + 17 * t)
     bg_b = int(32 * (1 - t) + 56 * t)
 
-    # Subtle inner bevel glow / border ring
-    if dist > 0.85:
-        factor = (dist - 0.85) / (0.92 - 0.85)
-        bg_r = int(bg_r * (1 - factor) + 99 * factor)
-        bg_g = int(bg_g * (1 - factor) + 102 * factor)
-        bg_b = int(bg_b * (1 - factor) + 241 * factor)
+    if dist > 0.92:
+        # Anti-aliased outer edge (seamless blend, zero border)
+        edge = (dist - 0.92) / (0.96 - 0.92)
+        if edge >= 1.0:
+            return (0, 0, 0, 0)
+        alpha = int((1.0 - edge) * 255)
+        return (bg_r, bg_g, bg_b, alpha)
 
     # Option 1: Native macOS Menu Bar SF Symbol (mic.fill)
     # 1. Central Capsule
