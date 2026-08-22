@@ -1,5 +1,5 @@
-.PHONY: help build compile test unit-test integration-test test-install verify check ci run dev stop download-models debug install uninstall clean \
-        voicetyper.build voicetyper.compile voicetyper.test voicetyper.unit-test voicetyper.verify voicetyper.run voicetyper.dev \
+.PHONY: help build compile app bundle icon test unit-test test-bundle integration-test test-install verify check ci run dev stop download-models debug install uninstall clean \
+        voicetyper.build voicetyper.compile voicetyper.app voicetyper.bundle voicetyper.test voicetyper.unit-test voicetyper.test-bundle voicetyper.verify voicetyper.run voicetyper.dev \
         voicetyper.stop voicetyper.download-models voicetyper.debug voicetyper.install voicetyper.uninstall voicetyper.clean
 
 help:
@@ -16,19 +16,23 @@ help:
 	@echo "================================================================="
 	@echo "Available commands:"
 	@echo "  make build / compile     - Build the VoiceTyper Swift executable"
-	@echo "  make test / unit-test    - Run Swift unit & installation lifecycle tests"
+	@echo "  make app / bundle        - Package full macOS Application (VoiceTyper.app)"
+	@echo "  make icon                - Generate high-res Apple AppIcon.icns"
+	@echo "  make test / unit-test    - Run Swift unit, bundle & lifecycle tests"
 	@echo "  make verify / check / ci - Full quality gate (release build + all tests)"
 	@echo "  make test-install        - Run isolated installation & CLI lifecycle test"
+	@echo "  make test-bundle         - Run macOS Application bundle test suite"
 	@echo "  make run                 - Run VoiceTyper background menu bar agent"
 	@echo "  make dev / debug         - Run VoiceTyper interactively in debug mode"
 	@echo "  make stop                - Stop running VoiceTyper background processes"
 	@echo "  make download-models     - Download Whisper & NVIDIA Parakeet models"
-	@echo "  make install             - Build & install binary to ~/.local/bin"
-	@echo "  make uninstall           - Uninstall binary and config from system"
+	@echo "  make install             - Build & install VoiceTyper.app and CLI symlink"
+	@echo "  make uninstall           - Uninstall binary and app bundle from system"
 	@echo "  make clean               - Remove build artifacts and local models"
 	@echo ""
 	@echo "Aliases (same as monorepo root):"
 	@echo "  make voicetyper.build"
+	@echo "  make voicetyper.app"
 	@echo "  make voicetyper.run"
 	@echo "  make voicetyper.test"
 	@echo "  make voicetyper.verify"
@@ -47,6 +51,16 @@ compile:
 		swift build -c release; \
 	fi
 
+# Packages the standalone macOS application bundle
+app: compile
+	./scripts/bundle_app.sh
+
+bundle: app
+
+# Generates macOS AppIcon.icns
+icon:
+	./scripts/generate_icon.py Resources/AppIcon.icns
+
 # Runs Swift unit tests & static symbol quality gates
 unit-test:
 	./tests/verify_symbols.sh
@@ -56,11 +70,15 @@ unit-test:
 		echo "ℹ️  'swift' toolchain not detected in current Linux environment."; \
 		echo "   VoiceTyper requires macOS (AppKit/AVFoundation/Accelerate)."; \
 		echo "✦ Performing local script syntax & lint quality gates..."; \
-		bash -n install.sh uninstall.sh download-models.sh tests/test_install.sh tests/verify_symbols.sh && \
+		bash -n install.sh uninstall.sh download-models.sh scripts/bundle_app.sh tests/test_install.sh tests/test_bundle.sh tests/verify_symbols.sh && \
 		echo "✓ All repository scripts passed local syntax validation."; \
 		echo "✦ Run 'make test' on your macOS machine or check GitHub Actions CI:"; \
 		echo "   https://github.com/burubur/voicetyper/actions"; \
 	fi
+
+# Runs macOS application bundle verification suite
+test-bundle:
+	./tests/test_bundle.sh
 
 # Runs end-to-end installation & CLI lifecycle test suite
 integration-test:
@@ -68,8 +86,8 @@ integration-test:
 
 test-install: integration-test
 
-# Runs both unit tests and installation lifecycle integration tests
-test: unit-test integration-test
+# Runs both unit tests, bundle packaging tests, and installation lifecycle integration tests
+test: unit-test test-bundle integration-test
 
 # Full quality gate verification (compile in release mode + all tests)
 verify: compile test
@@ -108,14 +126,17 @@ uninstall:
 
 # Removes local build artifacts and downloaded whisper models
 clean:
-	rm -rf .build
+	rm -rf .build build
 	rm -rf "$$HOME/.voicetyper"
 
 # VoiceTyper aliases
 voicetyper.build: build
 voicetyper.compile: compile
+voicetyper.app: app
+voicetyper.bundle: bundle
 voicetyper.test: test
 voicetyper.unit-test: unit-test
+voicetyper.test-bundle: test-bundle
 voicetyper.run: run
 voicetyper.dev: dev
 voicetyper.stop: stop

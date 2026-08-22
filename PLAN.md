@@ -12,6 +12,7 @@
 - [x] **Plan 8 — Audio DSP Adaptive Speech Gain & Peak Normalization with Soft-Knee Limiter** *(Priority: 🔴 High)*
 - [x] **Plan 9 — Studio Window UI Unification, Hover Actions & Strict Card Bounding** *(Priority: 🔴 High)*
 - [x] **Plan 10 — 2-Pass Cross-File Static Symbol & Access-Level Quality Gate** *(Priority: 🔴 High)*
+- [x] **Plan 11 — Standalone macOS Application Bundle (`VoiceTyper.app`), Spotlight Indexing & App Lifecycle** *(Priority: 🔴 High)*
 
 ---
 
@@ -311,3 +312,23 @@
 - Continuous 60s silence (RMS < 0.005) automatically concludes session to protect storage.
 - Floating indicator renders minimal 92x28px pill (`🟣 01 │ 04:28`).
 - Static AST quality gate `tests/verify_symbols.sh` integrated into `make test`.
+
+---
+
+# Plan 11 — Standalone macOS Application Bundle (`VoiceTyper.app`), Spotlight Indexing & App Lifecycle
+
+## 1) Task Summary
+- Module: `scripts/bundle_app.sh`, `scripts/generate_icon.py`, `Resources/`, `Sources/VoiceTyper/App.swift`, `Sources/VoiceTyper/UpgradeManager.swift`, `Makefile`, `install.sh`, `uninstall.sh`, `tests/test_bundle.sh`
+- Goal: Transform VoiceTyper from a CLI background agent into a first-class macOS application bundle (`VoiceTyper.app`) registered in `/Applications` (indexed by Spotlight, Launchpad, and Raycast), with full app lifecycle support, launch-at-login integration, and high-res Apple `AppIcon.icns`.
+- Type: macOS Native Architecture & Packaging
+- Priority: High
+
+## 2) Scope & Acceptance
+- `VoiceTyper.app` structured with `Contents/MacOS/VoiceTyper`, `Contents/Info.plist`, `Contents/PkgInfo` (`APPL????`), `Contents/Resources/AppIcon.icns`, and `Contents/Resources/VoiceTyper.entitlements`.
+- High-resolution squircle AppIcon generator (`scripts/generate_icon.py`) producing standard Apple `.icns` format (16x16 to 512x512).
+- Native app lifecycle: `applicationShouldHandleReopen(_:hasVisibleWindows:)` summons Studio Window (`showHistoryWindow()`) with `NSApplication.shared.activate(ignoringOtherApps: true)` when launched from Spotlight while already running.
+- Native `Launch at Login` toggle in menu bar via `ServiceManagement` `SMAppService.mainApp`.
+- Clean app termination via `⌘Q` / `applicationWillTerminate` removing PID lock file.
+- `install.sh` and `make install` package `.app` into `/Applications` (fallback `$HOME/Applications`), create CLI symlink `~/.local/bin/voicetyper`, and register with LaunchServices `lsregister`.
+- `uninstall.sh` removes `.app` bundle from Applications folders and cleans CLI symlink.
+- Comprehensive test suite `tests/test_bundle.sh` covering bundle structure, Info.plist schema, PkgInfo, icns headers, paths with spaces, and idempotent re-bundling.

@@ -8,6 +8,10 @@
     <string>VoiceTyper</string>
     <key>CFBundleDisplayName</key>
     <string>VoiceTyper</string>
+    <key>CFBundleExecutable</key>
+    <string>VoiceTyper</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -18,5 +22,11 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>VoiceTyper requires microphone access for offline speech-to-text dictation.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>VoiceTyper requires AppleEvents for text injection and hotkey monitoring.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
 </dict>
 </plist>

@@ -64,12 +64,25 @@ fi
 # 3. Determine Installation Path
 PREFIX="${PREFIX:-$HOME/.local/bin}"
 VOICETYPER_HOME="${VOICETYPER_HOME:-$HOME/.voicetyper}"
+APP_DIR="${APP_DIR:-}"
+
+if [ -z "${APP_DIR}" ]; then
+    if [ -w "/Applications" ]; then
+        APP_DIR="/Applications"
+    else
+        APP_DIR="$HOME/Applications"
+    fi
+fi
 
 mkdir -p "${PREFIX}"
 mkdir -p "${VOICETYPER_HOME}"
+mkdir -p "${APP_DIR}"
+
+APP_BUNDLE="${APP_DIR}/VoiceTyper.app"
 
 echo -e "Detected OS: ${BOLD}${OS}${RESET} | Arch: ${BOLD}${ARCH}${RESET}"
-echo -e "Target Path: ${BOLD}${PREFIX}/voicetyper${RESET}"
+echo -e "App Bundle:  ${BOLD}${APP_BUNDLE}${RESET}"
+echo -e "CLI Path:    ${BOLD}${PREFIX}/voicetyper${RESET}"
 echo -e "Data Path:   ${BOLD}${VOICETYPER_HOME}${RESET}"
 echo "───────────────────────────────────────────────────────────────────────────"
 
@@ -84,6 +97,7 @@ if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ] && grep -q '"Voi
         (cd "${REPO_ROOT}" && swift build -c release)
     fi
     BUILD_BIN="${REPO_ROOT}/.build/release/VoiceTyper"
+    SOURCE_DIR="${REPO_ROOT}"
 else
     echo -e "✦ Cloning and building VoiceTyper from https://github.com/burubur/voicetyper..."
     TMP_DIR="$(mktemp -d)"
@@ -95,11 +109,31 @@ else
         (cd "${TMP_DIR}" && swift build -c release)
     fi
     BUILD_BIN="${TMP_DIR}/.build/release/VoiceTyper"
+    SOURCE_DIR="${TMP_DIR}"
 fi
 
-# 5. Install Binary
-echo -e "📦 Installing binary to ${PREFIX}/voicetyper..."
-if [ -f "${PREFIX}/voicetyper" ]; then
+# 5. Package macOS Application Bundle
+echo -e "📦 Packaging macOS Application Bundle to ${APP_BUNDLE}..."
+rm -rf "${APP_BUNDLE}"
+if [ -f "${SOURCE_DIR}/scripts/bundle_app.sh" ]; then
+    bash "${SOURCE_DIR}/scripts/bundle_app.sh" --bin "${BUILD_BIN}" --output "${APP_BUNDLE}" --resources "${SOURCE_DIR}/Resources"
+else
+    mkdir -p "${APP_BUNDLE}/Contents/MacOS"
+    mkdir -p "${APP_BUNDLE}/Contents/Resources"
+    cp -f "${BUILD_BIN}" "${APP_BUNDLE}/Contents/MacOS/VoiceTyper"
+    chmod +x "${APP_BUNDLE}/Contents/MacOS/VoiceTyper"
+    if [ -f "${SOURCE_DIR}/Resources/Info.plist" ]; then
+        cp -f "${SOURCE_DIR}/Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
+    fi
+    echo -n "APPL????" > "${APP_BUNDLE}/Contents/PkgInfo"
+    if [ -f "${SOURCE_DIR}/Resources/AppIcon.icns" ]; then
+        cp -f "${SOURCE_DIR}/Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+    fi
+fi
+
+# 6. Install CLI Symlink / Executable
+echo -e "🔗 Linking CLI binary to ${PREFIX}/voicetyper..."
+if [ -f "${PREFIX}/voicetyper" ] || [ -L "${PREFIX}/voicetyper" ]; then
     rm -f "${PREFIX}/voicetyper" 2>/dev/null || true
 fi
 # Remove stale /usr/local/bin/voicetyper if present to prevent PATH conflicts
@@ -107,25 +141,40 @@ if [ "${PREFIX}" != "/usr/local/bin" ] && [ -f "/usr/local/bin/voicetyper" ]; th
     echo -e "✦ Removing legacy /usr/local/bin/voicetyper to ensure ~/.local/bin takes precedence..."
     rm -f "/usr/local/bin/voicetyper" 2>/dev/null || sudo rm -f "/usr/local/bin/voicetyper" 2>/dev/null || true
 fi
-cp "${BUILD_BIN}" "${PREFIX}/voicetyper"
+
+APP_INTERNAL_BIN="${APP_BUNDLE}/Contents/MacOS/VoiceTyper"
+if [ -f "${APP_INTERNAL_BIN}" ]; then
+    ln -sf "${APP_INTERNAL_BIN}" "${PREFIX}/voicetyper" 2>/dev/null || cp -f "${APP_INTERNAL_BIN}" "${PREFIX}/voicetyper"
+else
+    cp -f "${BUILD_BIN}" "${PREFIX}/voicetyper"
+fi
 chmod +x "${PREFIX}/voicetyper"
 
+# 7. Ad-Hoc Codesigning
 if command -v codesign >/dev/null 2>&1; then
-    if [ -f "${REPO_ROOT}/Resources/VoiceTyper.entitlements" ]; then
-        codesign --force --deep --sign - --entitlements "${REPO_ROOT}/Resources/VoiceTyper.entitlements" "${PREFIX}/voicetyper" 2>/dev/null || codesign --force --sign - "${PREFIX}/voicetyper" 2>/dev/null || true
+    ENTITLEMENTS="${APP_BUNDLE}/Contents/Resources/VoiceTyper.entitlements"
+    if [ -f "${ENTITLEMENTS}" ]; then
+        codesign --force --deep --sign - --entitlements "${ENTITLEMENTS}" "${APP_BUNDLE}" 2>/dev/null || codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
     else
-        codesign --force --sign - "${PREFIX}/voicetyper" 2>/dev/null || true
+        codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
     fi
 fi
 
-echo "✓ Binary installed into ${PREFIX}/voicetyper"
+# 8. Register with LaunchServices
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [ -f "${LSREGISTER}" ]; then
+    "${LSREGISTER}" -f "${APP_BUNDLE}" 2>/dev/null || true
+fi
 
-# 6. Record source repo cache for omnipresent voicetyper upgrade
+echo "✓ Application bundle installed into ${APP_BUNDLE}"
+echo "✓ CLI binary linked into ${PREFIX}/voicetyper"
+
+# 9. Record source repo cache for omnipresent voicetyper upgrade
 if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/Package.swift" ]; then
     echo "${REPO_ROOT}" > "${VOICETYPER_HOME}/source_repo"
 fi
 
-# 7. Shell PATH Configuration
+# 10. Shell PATH Configuration
 SHELL_CONFIG=""
 if [ -f "$HOME/.zshrc" ]; then
     SHELL_CONFIG="$HOME/.zshrc"
@@ -142,18 +191,24 @@ if [ -n "${SHELL_CONFIG}" ]; then
     fi
 fi
 
-# 8. Restart Application
+# 11. Restart Application
 echo "🚀 Starting VoiceTyper in the background..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
 
-nohup "${PREFIX}/voicetyper" > "${VOICETYPER_HOME}/app.log" 2>&1 &
+if [ -f "${APP_INTERNAL_BIN}" ]; then
+    nohup "${APP_INTERNAL_BIN}" > "${VOICETYPER_HOME}/app.log" 2>&1 &
+else
+    nohup "${PREFIX}/voicetyper" > "${VOICETYPER_HOME}/app.log" 2>&1 &
+fi
 
 echo "───────────────────────────────────────────────────────────────────────────"
-echo -e "${GREEN}${BOLD}✓ VoiceTyper successfully installed to ${PREFIX}/voicetyper${RESET}"
+echo -e "${GREEN}${BOLD}✓ VoiceTyper successfully installed to ${APP_BUNDLE}${RESET}"
+echo -e "  CLI accessible via: ${BOLD}${PREFIX}/voicetyper${RESET}"
 echo "  Configuration and logs stored in ${VOICETYPER_HOME}/"
 echo
 echo -e "${BOLD}Next steps:${RESET}"
+echo -e "  • Spotlight Search: Search ${CYAN}VoiceTyper${RESET} in Spotlight / Launchpad to summon or launch."
 echo -e "  • Menu Bar Agent:  Running in your menu bar (microphone icon)."
 echo -e "  • Dictate Text:    Press and hold ${CYAN}Right Option${RESET} key to dictate anywhere."
 echo -e "  • Voice Memo:      Press and hold ${CYAN}Shift + Right Option${RESET} to save voice memo."

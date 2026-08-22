@@ -2,8 +2,9 @@
 # ==============================================================================
 # VoiceTyper End-to-End Installation & CLI Lifecycle Test Suite
 #
-# Validates build, isolated installation, CLI argument routing, codesigning,
-# and uninstallation without altering the user's live system.
+# Validates build, isolated installation of VoiceTyper.app & CLI symlink,
+# CLI argument routing, codesigning, and uninstallation without altering
+# the user's live system.
 # ==============================================================================
 
 set -euo pipefail
@@ -22,17 +23,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_DIR="$(mktemp -d)"
 TEST_PREFIX="${TEST_DIR}/bin"
 TEST_HOME="${TEST_DIR}/.voicetyper"
+TEST_APP_DIR="${TEST_DIR}/Applications"
 
 cleanup() {
     rm -rf "${TEST_DIR}"
 }
 trap cleanup EXIT
 
-mkdir -p "${TEST_PREFIX}" "${TEST_HOME}"
+mkdir -p "${TEST_PREFIX}" "${TEST_HOME}" "${TEST_APP_DIR}"
 
 if ! command -v swift >/dev/null 2>&1; then
     echo -e "${CYAN}ℹ 'swift' not available on this machine (macOS-only). Validating script syntax...${RESET}"
-    bash -n "${REPO_ROOT}/install.sh" "${REPO_ROOT}/uninstall.sh" "${REPO_ROOT}/download-models.sh"
+    bash -n "${REPO_ROOT}/install.sh" "${REPO_ROOT}/uninstall.sh" "${REPO_ROOT}/download-models.sh" "${REPO_ROOT}/scripts/bundle_app.sh"
     echo -e "${GREEN}✓ All repository scripts passed syntax checking.${RESET}"
     exit 0
 fi
@@ -41,8 +43,16 @@ fi
 echo -e "\n${BOLD}[1/5] Testing ./install.sh in isolated sandbox...${RESET}"
 (
     cd "${REPO_ROOT}"
-    PREFIX="${TEST_PREFIX}" VOICETYPER_HOME="${TEST_HOME}" ./install.sh
+    PREFIX="${TEST_PREFIX}" VOICETYPER_HOME="${TEST_HOME}" APP_DIR="${TEST_APP_DIR}" ./install.sh
 )
+
+# Verify .app bundle existence
+INSTALLED_APP="${TEST_APP_DIR}/VoiceTyper.app"
+if [ ! -d "${INSTALLED_APP}" ]; then
+    echo -e "${RED}❌ Test Failed: Application bundle not installed at ${INSTALLED_APP}${RESET}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Application bundle successfully created at ${INSTALLED_APP}.${RESET}"
 
 # Verify binary existence and permissions
 INSTALLED_BIN="${TEST_PREFIX}/voicetyper"
@@ -50,7 +60,7 @@ if [ ! -x "${INSTALLED_BIN}" ]; then
     echo -e "${RED}❌ Test Failed: Binary not installed or not executable at ${INSTALLED_BIN}${RESET}"
     exit 1
 fi
-echo -e "${GREEN}✓ Binary successfully created with executable permissions.${RESET}"
+echo -e "${GREEN}✓ Binary/symlink successfully created with executable permissions.${RESET}"
 
 # Verify source_repo cache
 if [ ! -f "${TEST_HOME}/source_repo" ]; then
@@ -96,11 +106,16 @@ echo -e "${GREEN}✓ Help subcommand passed.${RESET}"
 echo -e "\n${BOLD}[5/5] Testing ./uninstall.sh in isolated sandbox...${RESET}"
 (
     cd "${REPO_ROOT}"
-    PREFIX="${TEST_PREFIX}" VOICETYPER_HOME="${TEST_HOME}" ./uninstall.sh --yes --purge
+    PREFIX="${TEST_PREFIX}" VOICETYPER_HOME="${TEST_HOME}" APP_DIR="${TEST_APP_DIR}" ./uninstall.sh --yes --purge
 )
 
-if [ -f "${INSTALLED_BIN}" ]; then
+if [ -f "${INSTALLED_BIN}" ] || [ -L "${INSTALLED_BIN}" ]; then
     echo -e "${RED}❌ Test Failed: Binary still exists at ${INSTALLED_BIN} after uninstallation${RESET}"
+    exit 1
+fi
+
+if [ -d "${INSTALLED_APP}" ]; then
+    echo -e "${RED}❌ Test Failed: Application bundle still exists at ${INSTALLED_APP} after uninstallation${RESET}"
     exit 1
 fi
 
@@ -108,7 +123,7 @@ if [ -d "${TEST_HOME}" ]; then
     echo -e "${RED}❌ Test Failed: Home directory ${TEST_HOME} still exists after --purge${RESET}"
     exit 1
 fi
-echo -e "${GREEN}✓ Uninstaller cleaned up binary and purged directory.${RESET}"
+echo -e "${GREEN}✓ Uninstaller cleaned up application bundle, binary symlink, and purged directory.${RESET}"
 
 echo -e "\n${BOLD}${GREEN}═════════════════════════════════════════════════════════════════════${RESET}"
 echo -e "${BOLD}${GREEN}🎉 ALL INSTALLATION & CLI LIFECYCLE TESTS PASSED!${RESET}"

@@ -2,7 +2,8 @@
 # ==============================================================================
 # VoiceTyper App & CLI (`voicetyper`) — Uninstaller Script
 #
-# Removes voicetyper binary from PATH and optionally purges ~/.voicetyper/ data.
+# Removes VoiceTyper.app bundle from Applications, voicetyper binary from PATH,
+# and optionally purges ~/.voicetyper/ data.
 # ==============================================================================
 
 set -euo pipefail
@@ -17,6 +18,7 @@ RESET='\033[0m'
 INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 VOICETYPER_HOME="${VOICETYPER_HOME:-$HOME/.voicetyper}"
 BINARY_PATH="$INSTALL_DIR/voicetyper"
+APP_DIR="${APP_DIR:-}"
 PURGE=false
 YES=false
 
@@ -59,10 +61,25 @@ echo "🛑 Stopping running instances..."
 pkill -i -x "VoiceTyper" 2>/dev/null || true
 pkill -i -x "voicetyper" 2>/dev/null || true
 
-# 2. Remove Binary
+# 2. Remove Application Bundles
+echo "📦 Removing application bundles..."
+for app_path in "/Applications/VoiceTyper.app" "$HOME/Applications/VoiceTyper.app" "${APP_DIR:+${APP_DIR}/VoiceTyper.app}"; do
+    if [ -d "$app_path" ]; then
+        if [ -w "$(dirname "$app_path")" ] || [ -w "$app_path" ]; then
+            rm -rf "$app_path" 2>/dev/null || true
+            echo -e "${GREEN}✔ Removed ${app_path}${RESET}"
+        else
+            echo "Removing application bundle from $app_path..."
+            sudo rm -rf "$app_path" 2>/dev/null || true
+            echo -e "${GREEN}✔ Removed ${app_path}${RESET}"
+        fi
+    fi
+done
+
+# 3. Remove Binary / Symlink
 REMOVED=false
 for bin_path in "$BINARY_PATH" "$HOME/.local/bin/voicetyper" "/usr/local/bin/voicetyper"; do
-    if [ -f "$bin_path" ]; then
+    if [ -f "$bin_path" ] || [ -L "$bin_path" ]; then
         if [ -w "$(dirname "$bin_path")" ] || [ -w "$bin_path" ]; then
             rm -f "$bin_path" 2>/dev/null || true
             echo -e "${GREEN}✔ Removed binary from ${bin_path}${RESET}"
@@ -80,7 +97,7 @@ if [ "$REMOVED" = false ]; then
     echo -e "${YELLOW}ℹ Binary not found.${RESET}"
 fi
 
-# 3. Optional Data Purge
+# 4. Optional Data Purge
 if [ -d "${VOICETYPER_HOME}" ]; then
     if [ "$PURGE" = true ]; then
         rm -rf "${VOICETYPER_HOME}"

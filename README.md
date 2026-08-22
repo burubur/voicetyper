@@ -9,6 +9,7 @@ A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for 
 
 ## Features
 
+- **Standalone macOS Application (`VoiceTyper.app`)**: Packaged as a native application bundle in `/Applications` with high-resolution Apple squircle icon. Instantly launch or summon via **Spotlight (`⌘ + Space`)**, Launchpad, or Raycast.
 - **Direct Dictation (Hold-to-Talk)**: Hold `Right Option` to speak, release to transcribe and type directly at your cursor.
 - **Hands-Free Conversation Capture (Toggle)**: Tap `Shift + Right Option` once to talk hands-free; tap again to stop. Automatically segments recordings into **rolling 5-minute laps** to bound memory, and automatically stops on **1 minute of silence**.
 - **Native Classical Audio DSP & Adaptive Gain**: 4th-order 80Hz Butterworth high-pass filter cuts 50/60Hz AC hum and laptop fan noise; vDSP spectral subtraction eliminates background hiss; adaptive speech gain & soft-knee normalization boosts quiet speech by up to +18dB to -1.0 dBFS headroom without distortion.
@@ -19,7 +20,7 @@ A lightning-fast, native macOS voice-to-text app powered by **whisper.cpp** for 
 - **Clipboard Preservation**: Borrows your clipboard for ~500ms to paste text, then restores your original clipboard contents.
 - **Dual-Mode Floating Indicator**: Minimalist 34x34px pink circle for direct dictation; 136x34px purple pill with **live 5-bar signal-reactive waveform EQ**, lap counter, and ticking timer for conversation memos.
 - **Transcription Studio Window**: Dual-tab macOS GUI window (Transcriptions & Conversations) with hover-to-reveal borderless action buttons (`▷ Play`, `📁 Finder`, `📋 Copy`, `🗑 Delete`), live search, and bounded card layouts.
-- **Single-Instance & Zero-Sudo Upgrades**: Automatically terminates stale instances on startup (`~/.voicetyper/voicetyper.pid`) and upgrades seamlessly in user-space (`voicetyper upgrade`).
+- **Launch at Login & User-Space Upgrades**: Seamless auto-start via macOS `SMAppService` and instant upgrades via `voicetyper upgrade` with zero sudo prompt.
 
 ## Prerequisites
 
@@ -40,20 +41,13 @@ Alternatively, if you have already cloned the repository locally:
 make install
 ```
 
-This installs the compiled binary to `~/.local/bin/voicetyper`, downloads the recommended model, and prepares the background agent.
+This packages and installs `/Applications/VoiceTyper.app`, links the CLI binary to `~/.local/bin/voicetyper`, and registers the app with macOS LaunchServices.
 
-### Running the App
+### Running & Searching the App
 
-After installation, simply run:
-
-```bash
-voicetyper
-```
-
-To run in the foreground with verbose debug logging:
-```bash
-voicetyper --debug
-```
+- **Spotlight / Launchpad**: Press `⌘ + Space`, type `VoiceTyper`, and press Enter to start or summon the Studio Window.
+- **CLI**: Run `voicetyper` or with debug logging `voicetyper --debug`.
+- **Package Bundle Locally**: Run `make app` to build `build/VoiceTyper.app`.
 
 ### Upgrading
 

@@ -109,6 +109,19 @@ public final class UpgradeManager: Sendable {
         return nil
     }
 
+    /// Determines the target installation path for the macOS application bundle.
+    /// Checks /Applications first, falling back to ~/Applications if /Applications is not writable.
+    public static func determineAppBundlePath() -> String {
+        let systemApps = "/Applications"
+        let userApps = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path
+        if FileManager.default.isWritableFile(atPath: systemApps) {
+            return (systemApps as NSString).appendingPathComponent("VoiceTyper.app")
+        } else {
+            try? FileManager.default.createDirectory(atPath: userApps, withIntermediateDirectories: true)
+            return (userApps as NSString).appendingPathComponent("VoiceTyper.app")
+        }
+    }
+
     /// Resolves the installed binary destination path.
     /// Prefers ~/.local/bin/voicetyper (user-owned, zero sudo/password required).
     public static func determineInstallPath() -> String {
@@ -232,36 +245,83 @@ public final class UpgradeManager: Sendable {
             exit(1)
         }
 
-        Swift.print("📦 Installing binary to \(installPath)...")
+        let appBundlePath = determineAppBundlePath()
+        Swift.print("📦 Packaging macOS Application Bundle to \(appBundlePath)...")
+
+        let bundleScript = URL(fileURLWithPath: validSourceDir).appendingPathComponent("scripts/bundle_app.sh").path
+        if FileManager.default.fileExists(atPath: bundleScript) {
+            let bundleProc = Process()
+            bundleProc.executableURL = URL(fileURLWithPath: "/bin/bash")
+            bundleProc.arguments = [bundleScript, "--bin", builtBin, "--output", appBundlePath, "--resources", URL(fileURLWithPath: validSourceDir).appendingPathComponent("Resources").path]
+            try? bundleProc.run()
+            bundleProc.waitUntilExit()
+        } else {
+            // Manual fallback bundling
+            let appContents = URL(fileURLWithPath: appBundlePath).appendingPathComponent("Contents")
+            let appMacOS = appContents.appendingPathComponent("MacOS")
+            let appResources = appContents.appendingPathComponent("Resources")
+            try? FileManager.default.createDirectory(at: appMacOS, withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(at: appResources, withIntermediateDirectories: true)
+
+            let appBin = appMacOS.appendingPathComponent("VoiceTyper").path
+            try? FileManager.default.removeItem(atPath: appBin)
+            try? FileManager.default.copyItem(atPath: builtBin, toPath: appBin)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: appBin)
+
+            let infoPlist = URL(fileURLWithPath: validSourceDir).appendingPathComponent("Resources/Info.plist").path
+            if FileManager.default.fileExists(atPath: infoPlist) {
+                try? FileManager.default.copyItem(atPath: infoPlist, toPath: appContents.appendingPathComponent("Info.plist").path)
+            }
+            let pkgInfo = appContents.appendingPathComponent("PkgInfo").path
+            try? "APPL????".write(toFile: pkgInfo, atomically: true, encoding: .utf8)
+        }
+
+        // Install or link CLI binary
+        Swift.print("📦 Linking CLI binary to \(installPath)...")
         let installDir = (installPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(at: URL(fileURLWithPath: installDir), withIntermediateDirectories: true)
+
+        let appInternalBin = URL(fileURLWithPath: appBundlePath).appendingPathComponent("Contents/MacOS/VoiceTyper").path
+        let sourceForCli = FileManager.default.fileExists(atPath: appInternalBin) ? appInternalBin : builtBin
 
         do {
             if FileManager.default.fileExists(atPath: installPath) {
                 try FileManager.default.removeItem(atPath: installPath)
             }
-            try FileManager.default.copyItem(atPath: builtBin, toPath: installPath)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installPath)
-            Swift.print("✓ Replaced binary at \(installPath)")
+            try FileManager.default.createSymbolicLink(atPath: installPath, withDestinationPath: sourceForCli)
+            Swift.print("✓ Linked CLI binary at \(installPath)")
         } catch {
-            Swift.print("❌ Failed to copy binary to \(installPath): \(error.localizedDescription)")
-            exit(1)
+            // Fallback to copy if symlink creation fails
+            try? FileManager.default.removeItem(atPath: installPath)
+            try? FileManager.default.copyItem(atPath: sourceForCli, toPath: installPath)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installPath)
+            Swift.print("✓ Copied binary at \(installPath)")
         }
 
-        // Ad-hoc code signing for macOS microphone TCC permissions
+        // Ad-hoc code signing for macOS application bundle
         let entitlementsPath = URL(fileURLWithPath: validSourceDir)
             .appendingPathComponent("Resources/VoiceTyper.entitlements").path
         let codesign = Process()
         codesign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
         if FileManager.default.fileExists(atPath: entitlementsPath) {
-            codesign.arguments = ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, installPath]
+            codesign.arguments = ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, appBundlePath]
         } else {
-            codesign.arguments = ["--force", "--sign", "-", installPath]
+            codesign.arguments = ["--force", "--deep", "--sign", "-", appBundlePath]
         }
         try? codesign.run()
         codesign.waitUntilExit()
 
-        Swift.print("🚀 Restarting VoiceTyper menu bar agent in background...")
+        // Register with LaunchServices
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        if FileManager.default.fileExists(atPath: lsregister) {
+            let regProc = Process()
+            regProc.executableURL = URL(fileURLWithPath: lsregister)
+            regProc.arguments = ["-f", appBundlePath]
+            try? regProc.run()
+            regProc.waitUntilExit()
+        }
+
+        Swift.print("🚀 Restarting VoiceTyper in background...")
         let pkill = Process()
         pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
         pkill.arguments = ["-i", "-x", "VoiceTyper"]
@@ -275,7 +335,7 @@ public final class UpgradeManager: Sendable {
         pkillLower.waitUntilExit()
 
         let restart = Process()
-        restart.executableURL = URL(fileURLWithPath: installPath)
+        restart.executableURL = URL(fileURLWithPath: sourceForCli)
         let logURL = voicetyperHome.appendingPathComponent("app.log")
         if FileManager.default.fileExists(atPath: logURL.path),
            let logHandle = try? FileHandle(forWritingTo: logURL) {
@@ -286,7 +346,8 @@ public final class UpgradeManager: Sendable {
 
         Swift.print("───────────────────────────────────────────────────────────────────────────")
         Swift.print("✅ VoiceTyper successfully upgraded! (\(oldCommit) → \(newCommit))")
-        Swift.print("   Binary Path: \(installPath)")
+        Swift.print("   App Bundle : \(appBundlePath)")
+        Swift.print("   CLI Path   : \(installPath)")
         Swift.print("   Status     : Running in background (Menu Bar mic icon)")
     }
 }

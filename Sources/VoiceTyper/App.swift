@@ -1,5 +1,6 @@
 import AVFoundation
 import Cocoa
+import ServiceManagement
 
 // MARK: - App
 
@@ -105,6 +106,16 @@ final class App: NSObject, NSApplicationDelegate {
             }
             print("🧠 Loaded \(vocab.count) domain vocabulary terms for dynamic biasing.")
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showHistoryWindow()
+        return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        let pidFile = UpgradeManager.voicetyperHome.appendingPathComponent("voicetyper.pid")
+        try? FileManager.default.removeItem(at: pidFile)
     }
 
     // MARK: - Setup
@@ -235,6 +246,11 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(modelSubmenuItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = isLaunchAtLoginEnabled ? .on : .off
+        menu.addItem(loginItem)
 
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
         updateItem.target = self
@@ -434,8 +450,34 @@ final class App: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(self)
     }
 
+    private var isLaunchAtLoginEnabled: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return false
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        if #available(macOS 13.0, *) {
+            let service = SMAppService.mainApp
+            do {
+                if service.status == .enabled {
+                    try service.unregister()
+                    print("⚙️ Launch at login disabled.")
+                } else {
+                    try service.register()
+                    print("⚙️ Launch at login enabled.")
+                }
+            } catch {
+                print("❌ Failed to toggle launch at login: \(error)")
+            }
+            rebuildMenuBar()
+        }
+    }
+
     @objc private func showHistoryWindow() {
         historyWindowController.showWindow(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Transcription Pipeline
